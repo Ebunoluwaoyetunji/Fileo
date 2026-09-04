@@ -73,6 +73,11 @@ export function OnboardingScreen({
   };
 
   useEffect(() => {
+    // Auto-advance between steps, but never off the carousel on its own —
+    // the last step should wait for the user to tap "Create Account".
+    if (!nextRoute) {
+      return;
+    }
     const timer = setTimeout(advance, onboardingLayout.autoAdvanceMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
