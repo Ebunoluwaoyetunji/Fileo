@@ -20,6 +20,10 @@ import { radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
 const ID_LENGTH = 11;
+// Mock delay so the CTA's loading state feels like a real request — there's
+// still no verification service underneath, this just avoids an instant,
+// jarring jump straight to Home.
+const MOCK_VERIFY_DELAY_MS = 1000;
 
 function validateIdNumber(value: string, label: string): string | undefined {
   if (value.length === 0) {
@@ -42,8 +46,13 @@ export default function IdentityVerificationScreen() {
   const [bvn, setBvn] = useState('');
   const [ninError, setNinError] = useState<string | undefined>();
   const [bvnError, setBvnError] = useState<string | undefined>();
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const handleContinue = () => {
+    if (isVerifying) {
+      return;
+    }
+
     const nextNinError = validateIdNumber(nin, 'NIN Number');
     const nextBvnError = validateIdNumber(bvn, 'BVN');
     setNinError(nextNinError);
@@ -53,14 +62,17 @@ export default function IdentityVerificationScreen() {
       return;
     }
 
-    // Mock verification only — nin/bvn are validated above and discarded
-    // here, never logged or persisted.
-    signIn({
-      id: 'local-user',
-      fullName: fullName || 'FILEO User',
-      email: email || '',
-    });
-    router.replace('/(app)/home');
+    setIsVerifying(true);
+    setTimeout(() => {
+      // Mock verification only — nin/bvn are validated above and discarded
+      // here, never logged or persisted.
+      signIn({
+        id: 'local-user',
+        fullName: fullName || 'FILEO User',
+        email: email || '',
+      });
+      router.replace('/(app)/home');
+    }, MOCK_VERIFY_DELAY_MS);
   };
 
   return (
@@ -69,6 +81,7 @@ export default function IdentityVerificationScreen() {
       headingAccentColor={colors.textPrimary}
       ctaLabel="Continue"
       onSubmitCta={handleContinue}
+      ctaLoading={isVerifying}
     >
       <TextField
         label="NIN Number"

@@ -16,6 +16,9 @@ import { colors } from '../../constants/colors';
 const MOCK_VALID_CODE = '123456';
 const CODE_LENGTH = 6;
 const FALLBACK_PHONE = '08000000000';
+// Mock delay so the CTA's loading state feels like a real request — there's
+// still no backend underneath, this just avoids an instant, jarring jump.
+const MOCK_VERIFY_DELAY_MS = 900;
 
 /** Keeps the first/last 2 characters visible, masking the rest — matches
  * the Figma frame's "08******33" pattern. */
@@ -39,8 +42,12 @@ export default function OtpVerificationScreen() {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [showResendToast, setShowResendToast] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const handleVerify = () => {
+    if (isVerifying) {
+      return;
+    }
     if (code.length < CODE_LENGTH) {
       setError('Enter the 6-digit code.');
       return;
@@ -50,10 +57,13 @@ export default function OtpVerificationScreen() {
       return;
     }
     setError(undefined);
-    router.push({
-      pathname: '/(auth)/identity-verification',
-      params: { fullName: fullName ?? '', email: email ?? '' },
-    });
+    setIsVerifying(true);
+    setTimeout(() => {
+      router.push({
+        pathname: '/(auth)/identity-verification',
+        params: { fullName: fullName ?? '', email: email ?? '' },
+      });
+    }, MOCK_VERIFY_DELAY_MS);
   };
 
   const handleResend = () => {
@@ -71,6 +81,7 @@ export default function OtpVerificationScreen() {
         subtitleColor={colors.textPrimary}
         ctaLabel="Verify"
         onSubmitCta={handleVerify}
+        ctaLoading={isVerifying}
         bottomLinkLabel="Resend code"
         bottomLinkOnPress={handleResend}
       >

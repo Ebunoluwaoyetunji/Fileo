@@ -11,11 +11,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { layout, radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
@@ -28,6 +30,8 @@ export default function HomeScreen() {
   const firstName = user?.fullName?.trim().split(/\s+/)[0];
   const greeting = firstName ? `Hey ${firstName}` : 'Hey there';
 
+  const [showNotificationsToast, setShowNotificationsToast] = useState(false);
+
   const goToFiling = () => router.push(FILING_ROUTE);
 
   return (
@@ -36,7 +40,17 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.greeting}>{greeting}</Text>
+        <View style={styles.header}>
+          <Text style={styles.greeting}>{greeting}</Text>
+          <Pressable
+            onPress={() => setShowNotificationsToast(true)}
+            style={styles.notificationButton}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
 
         <Card style={styles.noticeCard}>
           <Text style={styles.noticeTitle}>Tax filing deadline matter</Text>
@@ -75,6 +89,12 @@ export default function HomeScreen() {
       </Pressable>
 
       <BottomTabBar active="home" />
+
+      <Toast
+        visible={showNotificationsToast}
+        message="No new notifications."
+        onHide={() => setShowNotificationsToast(false)}
+      />
     </Screen>
   );
 }
@@ -88,10 +108,18 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
   greeting: {
     ...typography.display,
     color: colors.textPrimary,
-    marginBottom: spacing.lg,
+  },
+  notificationButton: {
+    padding: spacing.xs,
   },
   noticeCard: {
     backgroundColor: colors.warningLight,
