@@ -1,20 +1,17 @@
 /**
  * Onboarding step 2 — Figma node 93:942 ("File in Four Simple Steps").
- * Illustration is a placeholder until the exported SVG for this frame is
- * available — see the TODO below.
+ * Illustration: 4 connected circles (document, checkmark, party-popper, ₦)
+ * linked by dotted arcs.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet } from 'react-native';
 import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
-// TODO: replace with the real illustration once its SVG is exported from
-// Figma (4 connected circles: document, checkmark, party-popper, ₦).
+const illustration = require('../../assets/images/step-2-illustration.png');
+const ASPECT_RATIO = 576 / 562;
+
 function Step2Illustration() {
-  return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderText}>Illustration pending</Text>
-    </View>
-  );
+  return <Image source={illustration} style={styles.illustration} resizeMode="contain" />;
 }
 
 export default function OnboardingStepTwo() {
@@ -35,18 +32,8 @@ export default function OnboardingStepTwo() {
 }
 
 const styles = StyleSheet.create({
-  placeholder: {
+  illustration: {
     width: '100%',
-    height: 280,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderText: {
-    color: colors.textInverse,
-    opacity: 0.7,
+    aspectRatio: ASPECT_RATIO,
   },
 });
