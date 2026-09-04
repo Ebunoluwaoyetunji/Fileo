@@ -1,8 +1,12 @@
 /**
- * Sign In — shares the Create Account frame's layout/pattern (the user
- * confirmed there's no separate Sign In design). Auth here is a local mock
- * only: there's no backend yet, so a non-empty email + password is treated
- * as a successful sign-in. Replace with real authentication later.
+ * Sign In — from the Figma frame the user provided for this screen (not a
+ * copy of Create Account's layout details, just the same shared AuthScreen
+ * component): fully-accent "Welcome Back" heading, dark subtitle, a plain
+ * dark "Forgot Password?" link, and a "Log In" CTA.
+ *
+ * Auth here is a local mock only: there's no backend yet, so a non-empty
+ * email + password is treated as a successful sign-in. Replace with real
+ * authentication later.
  */
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
@@ -39,13 +43,14 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
-      headingAccent="Welcome"
-      headingRest=" back"
-      subtitle="Sign in to continue your tax filing."
-      ctaLabel="Sign In"
+      headingAccent="Welcome Back"
+      headingRest=""
+      subtitle="Manage your tax filing"
+      subtitleColor={colors.textPrimary}
+      ctaLabel="Log In"
       onSubmitCta={handleSignIn}
       bottomText="Don't have an account?"
-      bottomLinkLabel="Create one"
+      bottomLinkLabel="Sign Up"
       bottomLinkHref="/(auth)/create-account"
     >
       <TextField
@@ -74,7 +79,7 @@ export default function SignInScreen() {
 function ForgotPasswordLink() {
   return (
     <Link href="/(auth)/forgot-password" style={styles.forgotLink}>
-      <Text style={styles.forgotLinkText}>Forgot password?</Text>
+      <Text style={styles.forgotLinkText}>Forgot Password?</Text>
     </Link>
   );
 }
@@ -86,6 +91,6 @@ const styles = StyleSheet.create({
   },
   forgotLinkText: {
     ...typography.caption,
-    color: colors.primary,
+    color: colors.textPrimary,
   },
 });

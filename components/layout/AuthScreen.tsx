@@ -1,9 +1,11 @@
 /**
- * Shared layout for the auth forms (Create Account, Sign In) — from the
- * Create Account Figma frame, which the user confirmed both screens share
- * rather than having separate designs: centered wordmark, a two-tone
- * heading (an accent-colored lead word + a dark serif remainder), a body
- * subtitle, the form fields, a full-width dark CTA, and a bottom link row.
+ * Shared layout for the auth forms (Create Account, Sign In): centered
+ * wordmark, a heading (an accent-colored lead word/phrase, optionally
+ * followed by a dark serif remainder — pass an empty `headingRest` for an
+ * all-accent heading), a body subtitle, the form fields, a full-width dark
+ * CTA, and a bottom link row. Create Account and Sign In each have their
+ * own Figma frame with slightly different heading/subtitle treatments, but
+ * share this same structural layout.
  */
 import { Href, Link } from 'expo-router';
 import React, { ReactNode } from 'react';
@@ -20,6 +22,8 @@ type AuthScreenProps = {
   /** Rest of the heading in the default dark color, e.g. " your Fileo account". */
   headingRest: string;
   subtitle: string;
+  /** Defaults to the muted secondary color; some frames use the dark primary text color instead. */
+  subtitleColor?: string;
   children: ReactNode;
   ctaLabel: string;
   onSubmitCta: () => void;
@@ -33,6 +37,7 @@ export function AuthScreen({
   headingAccent,
   headingRest,
   subtitle,
+  subtitleColor = colors.textSecondary,
   children,
   ctaLabel,
   onSubmitCta,
@@ -60,7 +65,7 @@ export function AuthScreen({
             <Text style={styles.headingAccent}>{headingAccent}</Text>
             {headingRest}
           </Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <Text style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</Text>
 
           <View style={styles.fields}>{children}</View>
 
