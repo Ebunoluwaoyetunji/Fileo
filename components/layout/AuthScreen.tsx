@@ -1,15 +1,25 @@
 /**
- * Shared layout for the auth forms (Create Account, Sign In): centered
- * wordmark, a heading (an accent-colored lead word/phrase, optionally
- * followed by a dark serif remainder — pass an empty `headingRest` for an
- * all-accent heading), a body subtitle, the form fields, a full-width dark
- * CTA, and a bottom link row. Create Account and Sign In each have their
- * own Figma frame with slightly different heading/subtitle treatments, but
- * share this same structural layout.
+ * Shared layout for all the auth screens (Create Account, Sign In, Forgot
+ * Password and its success/error states, OTP Verification): centered
+ * wordmark, an optional icon, a heading (an accent-colored lead
+ * word/phrase, optionally followed by a dark serif remainder — pass an
+ * empty `headingRest` for an all-accent heading, or `headingAccentColor`
+ * for a plain dark one), a body subtitle, the form fields, a full-width
+ * dark CTA, and a bottom link row. The bottom link is either real
+ * navigation (`bottomLinkHref`) or a mock local action (`bottomLinkOnPress`,
+ * e.g. "Resend code") — pass exactly one.
  */
 import { Href, Link } from 'expo-router';
 import React, { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
 import { Button } from '../ui/Button';
@@ -17,10 +27,15 @@ import { FileoWordmark } from '../ui/FileoWordmark';
 import { Screen } from './Screen';
 
 type AuthScreenProps = {
-  /** Accent-colored lead word(s) of the heading, e.g. "Create". */
+  /** Optional icon rendered above the heading (e.g. an alert glyph). */
+  icon?: ReactNode;
+  /** Accent-colored lead word(s)/phrase of the heading, e.g. "Create". */
   headingAccent: string;
   /** Rest of the heading in the default dark color, e.g. " your Fileo account". */
-  headingRest: string;
+  headingRest?: string;
+  /** Color for `headingAccent` — defaults to the brand accent; pass a dark
+   * text color for frames whose heading isn't accent-colored at all. */
+  headingAccentColor?: string;
   subtitle: string;
   /** Defaults to the muted secondary color; some frames use the dark primary text color instead. */
   subtitleColor?: string;
@@ -28,14 +43,20 @@ type AuthScreenProps = {
   ctaLabel: string;
   onSubmitCta: () => void;
   ctaLoading?: boolean;
-  bottomText: string;
+  /** Leading text before the bottom link, e.g. "Already have an account?". Omit for a standalone link/action. */
+  bottomText?: string;
   bottomLinkLabel: string;
-  bottomLinkHref: Href;
+  /** Real navigation — mutually exclusive with `bottomLinkOnPress`. */
+  bottomLinkHref?: Href;
+  /** A mock local action (e.g. "Resend code") instead of navigation — mutually exclusive with `bottomLinkHref`. */
+  bottomLinkOnPress?: () => void;
 };
 
 export function AuthScreen({
+  icon,
   headingAccent,
-  headingRest,
+  headingRest = '',
+  headingAccentColor = colors.primary,
   subtitle,
   subtitleColor = colors.textSecondary,
   children,
@@ -45,7 +66,15 @@ export function AuthScreen({
   bottomText,
   bottomLinkLabel,
   bottomLinkHref,
+  bottomLinkOnPress,
 }: AuthScreenProps) {
+  const bottomLinkContent = (
+    <Text style={styles.bottomText}>
+      {bottomText ? `${bottomText} ` : ''}
+      <Text style={styles.bottomLinkStrong}>{bottomLinkLabel}</Text>
+    </Text>
+  );
+
   return (
     <Screen>
       <KeyboardAvoidingView
@@ -61,8 +90,10 @@ export function AuthScreen({
             <FileoWordmark color={colors.textPrimary} width={100.5} height={25} />
           </View>
 
+          {icon ? <View style={styles.icon}>{icon}</View> : null}
+
           <Text style={styles.heading}>
-            <Text style={styles.headingAccent}>{headingAccent}</Text>
+            <Text style={{ color: headingAccentColor }}>{headingAccent}</Text>
             {headingRest}
           </Text>
           <Text style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</Text>
@@ -71,11 +102,15 @@ export function AuthScreen({
 
           <Button label={ctaLabel} variant="dark" loading={ctaLoading} onPress={onSubmitCta} />
 
-          <Link href={bottomLinkHref} style={styles.bottomLink}>
-            <Text style={styles.bottomText}>
-              {bottomText} <Text style={styles.bottomLinkStrong}>{bottomLinkLabel}</Text>
-            </Text>
-          </Link>
+          {bottomLinkOnPress ? (
+            <Pressable onPress={bottomLinkOnPress} style={styles.bottomLink}>
+              {bottomLinkContent}
+            </Pressable>
+          ) : (
+            <Link href={bottomLinkHref!} style={styles.bottomLink}>
+              {bottomLinkContent}
+            </Link>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -95,12 +130,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: spacing.xl,
   },
+  icon: {
+    marginBottom: spacing.md,
+  },
   heading: {
     ...typography.display,
     color: colors.textPrimary,
-  },
-  headingAccent: {
-    color: colors.primary,
   },
   subtitle: {
     ...typography.body,
