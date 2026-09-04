@@ -13,7 +13,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { NIGERIAN_BANKS } from '../../constants/platforms';
+import { AUTO_PULL_MESSAGE, NIGERIAN_BANKS } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -53,12 +53,15 @@ export default function SelectBankScreen() {
               onPress={() => togglePlatform(bank)}
               style={[styles.row, isSelected && styles.rowSelected]}
             >
-              <Text style={styles.rowLabel}>{bank}</Text>
-              <Ionicons
-                name={isSelected ? 'checkbox' : 'square-outline'}
-                size={20}
-                color={isSelected ? colors.primary : colors.textSecondary}
-              />
+              <View style={styles.rowTopLine}>
+                <Text style={styles.rowLabel}>{bank}</Text>
+                <Ionicons
+                  name={isSelected ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={isSelected ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              {isSelected ? <Text style={styles.autoPullText}>{AUTO_PULL_MESSAGE}</Text> : null}
             </Pressable>
           );
         }}
@@ -104,9 +107,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -119,11 +119,21 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: colors.primaryLight,
   },
+  rowTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   rowLabel: {
     ...typography.body,
     color: colors.textPrimary,
     flexShrink: 1,
     marginRight: spacing.sm,
+  },
+  autoPullText: {
+    ...typography.caption,
+    color: colors.primaryDark,
+    marginTop: spacing.xs,
   },
   continueButton: {
     marginTop: spacing.sm,

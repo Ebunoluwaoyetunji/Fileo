@@ -5,9 +5,13 @@
  *
  * No transaction parsing exists, so income lines are mock: one per selected
  * platform/bank, all using the frame's own example amount (₦4,820,000).
- * The flagged transaction is likewise one hardcoded mock item matching the
- * frame's example (12 Mar 2025, ₦350,000) — there's no real transaction
- * data to flag anything from yet.
+ * The flagged transaction is likewise mock, matching the frame's example
+ * (12 Mar 2025, ₦350,000) — but only appears when at least one Nigerian
+ * bank was selected (flagged items conceptually come from parsing an
+ * auto-pulled bank statement, not a manually-uploaded document the user
+ * already labeled themselves). That also makes the zero-flagged-
+ * transactions case reachable and testable: select only non-bank
+ * platforms and this screen has nothing to flag.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -20,6 +24,7 @@ import { Card } from '../../components/ui/Card';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { colors } from '../../constants/colors';
+import { isNigerianBank } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -40,9 +45,9 @@ function formatNaira(amount: number) {
 export default function IncomeSummaryScreen() {
   const { selectedPlatforms, incomeSources, setIncomeSources } = useFiling();
 
-  const [flaggedTransactions, setFlaggedTransactions] = useState<FlaggedTransaction[]>([
-    { id: 'flagged-1', date: '12 Mar 2025', amount: 350000, category: null },
-  ]);
+  const [flaggedTransactions, setFlaggedTransactions] = useState<FlaggedTransaction[]>([]);
+  const [flaggedInitialized, setFlaggedInitialized] = useState(false);
+  const hasFlaggedTransactions = flaggedTransactions.length > 0;
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
 
   // Populate mock income lines from whatever was selected upstream, once —
@@ -61,7 +66,25 @@ export default function IncomeSummaryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatforms]);
 
+  // Same "wait for real data, then decide once" approach as above — a lazy
+  // useState initializer would have frozen this at whatever
+  // selectedPlatforms was when the screen component was first constructed,
+  // which can predate the user's actual selection (React Navigation may
+  // construct a screen before it's focused).
+  useEffect(() => {
+    if (flaggedInitialized || selectedPlatforms.length === 0) {
+      return;
+    }
+    setFlaggedInitialized(true);
+    if (selectedPlatforms.some(isNigerianBank)) {
+      setFlaggedTransactions([
+        { id: 'flagged-1', date: '12 Mar 2025', amount: 350000, category: null },
+      ]);
+    }
+  }, [selectedPlatforms, flaggedInitialized]);
+
   const allCategorized = flaggedTransactions.every((t) => t.category !== null);
+  const completeButtonLabel = hasFlaggedTransactions ? 'Complete transaction review' : 'Continue';
 
   const handleSelectCategory = (transactionId: string, category: string) => {
     setFlaggedTransactions((prev) =>
@@ -112,48 +135,55 @@ export default function IncomeSummaryScreen() {
           </View>
         </Card>
 
-        <View style={styles.flaggedHeaderRow}>
-          <Text style={styles.sectionTitle}>Flagged Transactions</Text>
-          <View style={styles.needsReviewBadge}>
-            <Text style={styles.needsReviewBadgeText}>Needs your review</Text>
-          </View>
-        </View>
-        <Text style={styles.flaggedDescription}>
-          We couldn&apos;t automatically determine the purpose of these transactions. Select the
-          category that best describes each one.
-        </Text>
+        {hasFlaggedTransactions ? (
+          <>
+            <View style={styles.flaggedHeaderRow}>
+              <Text style={styles.sectionTitle}>Flagged Transactions</Text>
+              <View style={styles.needsReviewBadge}>
+                <Text style={styles.needsReviewBadgeText}>Needs your review</Text>
+              </View>
+            </View>
+            <Text style={styles.flaggedDescription}>
+              We couldn&apos;t automatically determine the purpose of these transactions. Select
+              the category that best describes each one.
+            </Text>
 
-        {flaggedTransactions.map((transaction) => (
-          <Card key={transaction.id} style={styles.flaggedCard}>
-            <View style={styles.flaggedTopRow}>
-              <Text style={styles.flaggedDate}>{transaction.date}</Text>
-              <Text style={styles.flaggedAmount}>{formatNaira(transaction.amount)}</Text>
-            </View>
-            <Text style={styles.flaggedPrompt}>What&apos;s this transaction for?</Text>
-            <View style={styles.categoryRow}>
-              {CATEGORY_OPTIONS.map((category) => {
-                const isSelected = transaction.category === category;
-                return (
-                  <Pressable
-                    key={category}
-                    onPress={() => handleSelectCategory(transaction.id, category)}
-                    style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
-                  >
-                    <Text
-                      style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected]}
-                    >
-                      {category}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Card>
-        ))}
+            {flaggedTransactions.map((transaction) => (
+              <Card key={transaction.id} style={styles.flaggedCard}>
+                <View style={styles.flaggedTopRow}>
+                  <Text style={styles.flaggedDate}>{transaction.date}</Text>
+                  <Text style={styles.flaggedAmount}>{formatNaira(transaction.amount)}</Text>
+                </View>
+                <Text style={styles.flaggedPrompt}>What&apos;s this transaction for?</Text>
+                <View style={styles.categoryRow}>
+                  {CATEGORY_OPTIONS.map((category) => {
+                    const isSelected = transaction.category === category;
+                    return (
+                      <Pressable
+                        key={category}
+                        onPress={() => handleSelectCategory(transaction.id, category)}
+                        style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            isSelected && styles.categoryChipTextSelected,
+                          ]}
+                        >
+                          {category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </Card>
+            ))}
+          </>
+        ) : null}
       </ScrollView>
 
       <Button
-        label="Complete transaction review"
+        label={completeButtonLabel}
         disabled={!allCategorized}
         onPress={handleCompleteReview}
         style={styles.completeButton}

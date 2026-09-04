@@ -14,7 +14,7 @@ import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { colors } from '../../constants/colors';
-import { isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
+import { AUTO_PULL_MESSAGE, isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -48,38 +48,51 @@ export default function SelectPlatformScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {PLATFORM_CATEGORIES.map((category) => (
-          <View key={category.title} style={styles.category}>
-            <Text style={styles.categoryTitle}>{category.title}</Text>
-            <View style={styles.grid}>
-              {category.platforms.map((platform) => {
-                const isOthersDrilldown =
-                  platform === 'Others' && category.title === NIGERIAN_FINTECHS_TITLE;
-                const isSelected = isOthersDrilldown
-                  ? selectedPlatforms.some(isNigerianBank)
-                  : selectedPlatforms.includes(platform);
-                const selectedBankCount = isOthersDrilldown
-                  ? selectedPlatforms.filter(isNigerianBank).length
-                  : 0;
+        {PLATFORM_CATEGORIES.map((category) => {
+          const selectedBanks =
+            category.title === NIGERIAN_FINTECHS_TITLE
+              ? selectedPlatforms.filter(isNigerianBank)
+              : [];
 
-                return (
-                  <Pressable
-                    key={platform}
-                    onPress={() => handlePlatformPress(category.title, platform)}
-                    style={[styles.tile, isSelected && styles.tileSelected]}
-                  >
-                    <Text style={[styles.tileLabel, isSelected && styles.tileLabelSelected]}>
-                      {platform}
-                    </Text>
-                    {selectedBankCount > 0 ? (
-                      <Text style={styles.tileSubLabel}>{selectedBankCount} selected</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+          return (
+            <View key={category.title} style={styles.category}>
+              <Text style={styles.categoryTitle}>{category.title}</Text>
+              <View style={styles.grid}>
+                {category.platforms.map((platform) => {
+                  const isOthersDrilldown =
+                    platform === 'Others' && category.title === NIGERIAN_FINTECHS_TITLE;
+                  const isSelected = isOthersDrilldown
+                    ? selectedBanks.length > 0
+                    : selectedPlatforms.includes(platform);
+
+                  return (
+                    <Pressable
+                      key={platform}
+                      onPress={() => handlePlatformPress(category.title, platform)}
+                      style={[styles.tile, isSelected && styles.tileSelected]}
+                    >
+                      <Text style={[styles.tileLabel, isSelected && styles.tileLabelSelected]}>
+                        {platform}
+                      </Text>
+                      {isOthersDrilldown && selectedBanks.length > 0 ? (
+                        <Text style={styles.tileSubLabel}>{selectedBanks.length} selected</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {selectedBanks.length > 0 ? (
+                <View style={styles.autoPullNote}>
+                  <Text style={styles.autoPullNoteLabel}>
+                    {selectedBanks.join(', ')}
+                  </Text>
+                  <Text style={styles.autoPullNoteText}>{AUTO_PULL_MESSAGE}</Text>
+                </View>
+              ) : null}
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <Button
@@ -155,6 +168,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.primaryDark,
     marginTop: spacing.xs,
+  },
+  autoPullNote: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  autoPullNoteLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+    marginBottom: 2,
+  },
+  autoPullNoteText: {
+    ...typography.caption,
+    color: colors.primaryDark,
   },
   continueButton: {
     marginTop: spacing.md,
