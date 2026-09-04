@@ -20,6 +20,7 @@ export const colors = {
 
   success: '#1E8E3E',
   warning: '#B8860B',
+  warningLight: '#EFE7D8',
   danger: '#D93025',
 
   overlay: 'rgba(17, 20, 23, 0.5)',

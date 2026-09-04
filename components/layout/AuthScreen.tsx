@@ -36,7 +36,8 @@ type AuthScreenProps = {
   /** Color for `headingAccent` — defaults to the brand accent; pass a dark
    * text color for frames whose heading isn't accent-colored at all. */
   headingAccentColor?: string;
-  subtitle: string;
+  /** Omit for frames with no subtitle (e.g. Identity Verification). */
+  subtitle?: string;
   /** Defaults to the muted secondary color; some frames use the dark primary text color instead. */
   subtitleColor?: string;
   children: ReactNode;
@@ -45,7 +46,8 @@ type AuthScreenProps = {
   ctaLoading?: boolean;
   /** Leading text before the bottom link, e.g. "Already have an account?". Omit for a standalone link/action. */
   bottomText?: string;
-  bottomLinkLabel: string;
+  /** Omit both this and the two props below for frames with no bottom link (e.g. Identity Verification). */
+  bottomLinkLabel?: string;
   /** Real navigation — mutually exclusive with `bottomLinkOnPress`. */
   bottomLinkHref?: Href;
   /** A mock local action (e.g. "Resend code") instead of navigation — mutually exclusive with `bottomLinkHref`. */
@@ -68,12 +70,12 @@ export function AuthScreen({
   bottomLinkHref,
   bottomLinkOnPress,
 }: AuthScreenProps) {
-  const bottomLinkContent = (
+  const bottomLinkContent = bottomLinkLabel ? (
     <Text style={styles.bottomText}>
       {bottomText ? `${bottomText} ` : ''}
       <Text style={styles.bottomLinkStrong}>{bottomLinkLabel}</Text>
     </Text>
-  );
+  ) : null;
 
   return (
     <Screen>
@@ -92,25 +94,29 @@ export function AuthScreen({
 
           {icon ? <View style={styles.icon}>{icon}</View> : null}
 
-          <Text style={styles.heading}>
+          <Text style={[styles.heading, !subtitle && styles.headingNoSubtitle]}>
             <Text style={{ color: headingAccentColor }}>{headingAccent}</Text>
             {headingRest}
           </Text>
-          <Text style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</Text>
+          ) : null}
 
           <View style={styles.fields}>{children}</View>
 
           <Button label={ctaLabel} variant="dark" loading={ctaLoading} onPress={onSubmitCta} />
 
-          {bottomLinkOnPress ? (
-            <Pressable onPress={bottomLinkOnPress} style={styles.bottomLink}>
-              {bottomLinkContent}
-            </Pressable>
-          ) : (
-            <Link href={bottomLinkHref!} style={styles.bottomLink}>
-              {bottomLinkContent}
-            </Link>
-          )}
+          {bottomLinkLabel ? (
+            bottomLinkOnPress ? (
+              <Pressable onPress={bottomLinkOnPress} style={styles.bottomLink}>
+                {bottomLinkContent}
+              </Pressable>
+            ) : (
+              <Link href={bottomLinkHref!} style={styles.bottomLink}>
+                {bottomLinkContent}
+              </Link>
+            )
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -136,6 +142,9 @@ const styles = StyleSheet.create({
   heading: {
     ...typography.display,
     color: colors.textPrimary,
+  },
+  headingNoSubtitle: {
+    marginBottom: spacing.xl,
   },
   subtitle: {
     ...typography.body,

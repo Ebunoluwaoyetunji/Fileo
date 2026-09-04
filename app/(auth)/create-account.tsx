@@ -118,7 +118,10 @@ export default function CreateAccountScreen() {
         message="A verification code has been sent to your email and phone number."
         onHide={() => {
           setShowToast(false);
-          router.push({ pathname: '/(auth)/otp-verification', params: { phone: phone.trim() } });
+          router.push({
+            pathname: '/(auth)/otp-verification',
+            params: { phone: phone.trim(), fullName: fullName.trim(), email: email.trim() },
+          });
         }}
       />
     </>

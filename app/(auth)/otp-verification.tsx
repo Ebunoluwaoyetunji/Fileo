@@ -29,7 +29,11 @@ function maskPhone(phone: string) {
 }
 
 export default function OtpVerificationScreen() {
-  const { phone } = useLocalSearchParams<{ phone?: string }>();
+  const { phone, fullName, email } = useLocalSearchParams<{
+    phone?: string;
+    fullName?: string;
+    email?: string;
+  }>();
   const maskedPhone = maskPhone(phone || FALLBACK_PHONE);
 
   const [code, setCode] = useState('');
@@ -46,7 +50,10 @@ export default function OtpVerificationScreen() {
       return;
     }
     setError(undefined);
-    router.push('/(auth)/identity-verification');
+    router.push({
+      pathname: '/(auth)/identity-verification',
+      params: { fullName: fullName ?? '', email: email ?? '' },
+    });
   };
 
   const handleResend = () => {
