@@ -3,14 +3,22 @@
  * Stress"). Illustration: phone mockup showing the FILEO splash with
  * overlapping "TAX FORM" / "BANK STATEMENT" document cards.
  */
-import { Image, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
 const illustration = require('../../assets/images/step-1-illustration.png');
 
 function Step1Illustration() {
-  return <Image source={illustration} style={styles.illustration} resizeMode="contain" />;
+  return (
+    <Image
+      source={illustration}
+      style={styles.illustration}
+      contentFit="contain"
+      contentPosition="bottom"
+    />
+  );
 }
 
 export default function OnboardingStepOne() {

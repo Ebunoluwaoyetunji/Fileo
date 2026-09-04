@@ -5,14 +5,22 @@
  * auto-advance/swipe and the CTA button finish onboarding and land on
  * create-account.
  */
-import { Image, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
 const illustration = require('../../assets/images/step-3-illustration.png');
 
 function Step3Illustration() {
-  return <Image source={illustration} style={styles.illustration} resizeMode="contain" />;
+  return (
+    <Image
+      source={illustration}
+      style={styles.illustration}
+      contentFit="contain"
+      contentPosition="bottom"
+    />
+  );
 }
 
 export default function OnboardingStepThree() {

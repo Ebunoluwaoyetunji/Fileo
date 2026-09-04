@@ -3,14 +3,22 @@
  * Illustration: 4 connected circles (document, checkmark, party-popper, ₦)
  * linked by dotted arcs.
  */
-import { Image, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
 const illustration = require('../../assets/images/step-2-illustration.png');
 
 function Step2Illustration() {
-  return <Image source={illustration} style={styles.illustration} resizeMode="contain" />;
+  return (
+    <Image
+      source={illustration}
+      style={styles.illustration}
+      contentFit="contain"
+      contentPosition="bottom"
+    />
+  );
 }
 
 export default function OnboardingStepTwo() {
