@@ -1,34 +1,45 @@
+/**
+ * Splash screen — implements Figma node 88:612 exactly: a full-bleed
+ * #0B1628 frame with only the centered FILEO wordmark on it (no other
+ * copy or controls in the design). Auto-advances to onboarding step 1.
+ */
 import { router } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { useEffect } from 'react';
+import { Image, StyleSheet } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
-import { Button } from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { spacing, typography } from '../../constants/theme';
+import { splashLayout } from '../../constants/theme';
+
+const SPLASH_REDIRECT_DELAY_MS = 1200;
 
 export default function SplashScreen() {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.replace('/(onboarding)/step-1');
+    }, SPLASH_REDIRECT_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <Screen style={styles.container}>
-      <Text style={styles.wordmark}>FILEO</Text>
-      <Text style={styles.tagline}>AI-native tax filing for Nigeria</Text>
-      <Button label="Get Started" onPress={() => router.push('/(onboarding)/step-1')} />
+    <Screen edges={[]} backgroundColor={colors.backgroundInverse} style={styles.container}>
+      <Image
+        source={require('../../assets/images/fileo-wordmark.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 0,
+    paddingTop: splashLayout.logoTop,
   },
-  wordmark: {
-    ...typography.h1,
-    color: colors.primary,
-    marginBottom: spacing.xs,
-  },
-  tagline: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
+  logo: {
+    width: splashLayout.logoWidth,
+    height: splashLayout.logoHeight,
   },
 });

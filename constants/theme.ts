@@ -35,12 +35,23 @@ export const layout = {
   maxContentWidth: 480,
 } as const;
 
+/**
+ * Splash screen (Figma node 88:612): full-bleed dark frame with the FILEO
+ * wordmark centered horizontally, offset from the top of the frame.
+ */
+export const splashLayout = {
+  logoWidth: 140.765,
+  logoHeight: 34.992,
+  logoTop: 405,
+} as const;
+
 export const theme = {
   colors,
   spacing,
   radii,
   typography,
   layout,
+  splashLayout,
 } as const;
 
 export type Theme = typeof theme;
