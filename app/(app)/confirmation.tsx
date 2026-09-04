@@ -1,51 +1,264 @@
+/**
+ * Confirmation — from the Figma frame: an approval stepper (4 steps, each
+ * with a status pill), a "what's next" note, and Download Summary / Done.
+ *
+ * Mock/local only: nothing here is actually submitted to FIRS or any real
+ * tax authority. "Professional review", "Filed with LIRS", and
+ * "Confirmation email" are static illustrative steps, not a real
+ * background process — there's no timer or job actually advancing them.
+ * "Download Summary" can't generate or save a real file in this prototype,
+ * so it says so via a toast rather than pretending to produce one.
+ */
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
+import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
-import { spacing, typography } from '../../constants/theme';
+import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
+
+type StepStatus = 'completed' | 'in-progress' | 'waiting';
+
+type Step = {
+  id: string;
+  label: string;
+  status: StepStatus;
+  meta?: string;
+};
+
+const STATUS_STYLES: Record<StepStatus, { bg: string; text: string; label: string }> = {
+  completed: { bg: '#DCEFE3', text: colors.success, label: 'Completed' },
+  'in-progress': { bg: colors.warningLight, text: colors.warning, label: 'In progress' },
+  waiting: { bg: colors.border, text: colors.textSecondary, label: 'Waiting' },
+};
 
 export default function ConfirmationScreen() {
   const { resetFiling } = useFiling();
+  const [showDownloadToast, setShowDownloadToast] = useState(false);
 
-  const handleBackToHome = () => {
+  const [approvedAt] = useState(() => new Date());
+  const approvedTime = approvedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const approvedDate = approvedAt.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  const steps: Step[] = [
+    { id: 'approved', label: 'Approved by you', status: 'completed' },
+    { id: 'professional-review', label: 'Professional review', status: 'in-progress', meta: 'Takes 2 hours' },
+    { id: 'filed', label: 'Filed with LIRS', status: 'waiting' },
+    { id: 'email', label: 'Confirmation email', status: 'waiting' },
+  ];
+
+  const handleDone = () => {
     resetFiling();
     router.replace('/(app)/home');
   };
 
   return (
-    <Screen style={styles.container}>
-      <Text style={styles.emoji}>🎉</Text>
-      <Text style={styles.title}>Return submitted!</Text>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.handle} />
+
+      <Ionicons
+        name="checkmark-circle-outline"
+        size={64}
+        color={colors.backgroundInverse}
+        style={styles.icon}
+      />
+      <Text style={styles.title}>Your return has been approved.</Text>
       <Text style={styles.subtitle}>
-        Your tax return has been filed. You&apos;ll get a confirmation from FIRS shortly.
+        We&apos;ll now review your return before submitting it. We&apos;ll keep you updated as
+        each step is completed.
       </Text>
 
-      <Button label="Back to Home" onPress={handleBackToHome} />
+      <View style={styles.stepperCard}>
+        {steps.map((step, index) => {
+          const statusStyle = STATUS_STYLES[step.status];
+          const isLast = index === steps.length - 1;
+          return (
+            <View key={step.id} style={styles.stepRow}>
+              <View style={styles.stepIconColumn}>
+                <View style={styles.stepIconCircle}>
+                  <Ionicons name="checkmark" size={14} color={colors.backgroundInverse} />
+                </View>
+                {!isLast ? <View style={styles.stepConnector} /> : null}
+              </View>
+              <View style={styles.stepContent}>
+                <View style={styles.stepTopRow}>
+                  <Text style={styles.stepLabel}>{step.label}</Text>
+                  {step.status === 'completed' ? (
+                    <Text style={styles.stepMeta}>{approvedTime}{'\n'}{approvedDate}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.stepBottomRow}>
+                  <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
+                    <Text style={[styles.statusPillText, { color: statusStyle.text }]}>
+                      {statusStyle.label}
+                    </Text>
+                  </View>
+                  {step.status === 'in-progress' && step.meta ? (
+                    <View style={styles.stepMetaRow}>
+                      <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+                      <Text style={styles.stepMetaText}>{step.meta}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.whatsNextNote}>
+        <Text style={styles.whatsNextTitle}>What&apos;s next?</Text>
+        <Text style={styles.whatsNextBody}>
+          Our tax professionals are reviewing your return. Once the review is complete, we&apos;ll
+          submit to FIRS and email you the confirmation and receipt.
+        </Text>
+      </View>
+
+      <Button
+        label="Download Summary"
+        variant="dark"
+        onPress={() => setShowDownloadToast(true)}
+        style={styles.downloadButton}
+      />
+      <Button label="Done" variant="ghost" onPress={handleDone} />
+      </ScrollView>
+
+      <Toast
+        visible={showDownloadToast}
+        message="Downloading a summary isn't available in this preview yet."
+        onHide={() => setShowDownloadToast(false)}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  scrollContent: {
+    paddingBottom: spacing.lg,
   },
-  emoji: {
-    fontSize: 48,
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: radii.full,
+    backgroundColor: colors.border,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  icon: {
+    alignSelf: 'center',
     marginBottom: spacing.md,
   },
   title: {
-    ...typography.h1,
+    ...typography.h2,
     color: colors.textPrimary,
-    marginBottom: spacing.xs,
     textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  stepperCard: {
+    width: '100%',
+    backgroundColor: colors.warningLight,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  stepRow: {
+    flexDirection: 'row',
+  },
+  stepIconColumn: {
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  stepIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.full,
+    backgroundColor: colors.backgroundInverse,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepConnector: {
+    width: 2,
+    flex: 1,
+    minHeight: spacing.xl,
+    backgroundColor: colors.backgroundInverse,
+    marginVertical: spacing.xs,
+  },
+  stepContent: {
+    flex: 1,
+    paddingBottom: spacing.md,
+  },
+  stepTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  stepLabel: {
+    ...typography.bodyStrong,
+    color: colors.textPrimary,
+  },
+  stepMeta: {
+    ...typography.caption,
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'right',
+  },
+  stepBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  statusPill: {
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  statusPillText: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  stepMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  stepMetaText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  whatsNextNote: {
+    width: '100%',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  whatsNextTitle: {
+    ...typography.bodyStrong,
+    color: colors.primaryDark,
+    marginBottom: spacing.xs,
+  },
+  whatsNextBody: {
+    ...typography.caption,
+    color: colors.primaryDark,
+  },
+  downloadButton: {
+    width: '100%',
+    marginBottom: spacing.sm,
   },
 });

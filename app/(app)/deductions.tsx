@@ -1,7 +1,12 @@
 /**
  * Deductions — from the Figma frame: an info card, then 4 toggleable
  * deduction categories (Rent, Life assurance, Pension, NHF), each with a
- * description of eligibility and what document it needs.
+ * description of eligibility and what document it needs. A toggled-on
+ * category gets a highlighted border and a document-upload prompt (also
+ * from the frame) — mock upload only, marks that category's document as
+ * provided in FilingContext's `uploadedDocuments` (reusing the same field
+ * Upload Documents uses for platforms, namespaced with a "deduction:"
+ * prefix so the two don't collide).
  *
  * The frame has no amount-entry fields — eligibility is toggle-only — so
  * each category's stored deduction amount is a mock computed figure, not
@@ -16,20 +21,23 @@
  *     toggling it on contributes ₦0 until a real amount is captured
  *     somewhere — flagged to the user rather than inventing a figure.
  */
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { colors } from '../../constants/colors';
-import { spacing, typography } from '../../constants/theme';
+import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
 type DeductionDefinition = {
   id: string;
   label: string;
   description: string;
+  /** What "Upload your ___" should say for this category's required document. */
+  documentLabel: string;
   computeAmount: (totalIncome: number) => number;
 };
 
@@ -39,6 +47,7 @@ const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     label: 'Rent payments',
     description:
       'If you paid rent in 2025, you can deduct up to ₦500,000 from your taxable income. Potential saving is up to ₦75,000 off your tax bill.',
+    documentLabel: 'rent receipt',
     computeAmount: () => 500000,
   },
   {
@@ -46,6 +55,7 @@ const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     label: 'Life assurance premium',
     description:
       'Full premium paid on a life insurance policy. Document needed — insurance premium receipt from a registered insurer.',
+    documentLabel: 'insurance premium receipt',
     computeAmount: () => 0,
   },
   {
@@ -53,6 +63,7 @@ const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     label: 'Pension contributions',
     description:
       'If you contributed up to 8% of your monthly gross income to a registered PFA. Document needed — annual PFA statement.',
+    documentLabel: 'PFA statement',
     computeAmount: (totalIncome) => Math.round(totalIncome * 0.08),
   },
   {
@@ -60,12 +71,16 @@ const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     label: 'National Housing Fund (NHF)',
     description:
       '2.5% of monthly basic salary contributed to Federal Mortgage Bank. Document needed — NHF contribution statement.',
+    documentLabel: 'NHF contribution statement',
     computeAmount: (totalIncome) => Math.round(totalIncome * 0.025),
   },
 ];
 
+/** Namespaced so this doesn't collide with platform names in the same array. */
+const documentKey = (deductionId: string) => `deduction:${deductionId}`;
+
 export default function DeductionsScreen() {
-  const { totalIncome, setDeductions } = useFiling();
+  const { totalIncome, setDeductions, uploadedDocuments, addUploadedDocument } = useFiling();
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
 
   // Keep FilingContext in sync as the user toggles, so return-review sees
@@ -84,6 +99,11 @@ export default function DeductionsScreen() {
     setEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleUploadDocument = (id: string) => {
+    // Mock upload only — no real file picker or transfer.
+    addUploadedDocument(documentKey(id));
+  };
+
   return (
     <Screen>
       <ScrollView
@@ -100,20 +120,47 @@ export default function DeductionsScreen() {
           </Text>
         </Card>
 
-        {DEDUCTION_DEFINITIONS.map((deduction) => (
-          <Card key={deduction.id} style={styles.deductionCard}>
-            <View style={styles.deductionHeader}>
-              <Text style={styles.deductionTitle}>{deduction.label}</Text>
-              <Switch
-                value={!!enabled[deduction.id]}
-                onValueChange={() => toggleDeduction(deduction.id)}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            </View>
-            <Text style={styles.deductionDescription}>{deduction.description}</Text>
-          </Card>
-        ))}
+        {DEDUCTION_DEFINITIONS.map((deduction) => {
+          const isEnabled = !!enabled[deduction.id];
+          const isUploaded = uploadedDocuments.includes(documentKey(deduction.id));
+
+          return (
+            <Card
+              key={deduction.id}
+              style={[styles.deductionCard, isEnabled && styles.deductionCardSelected]}
+            >
+              <View style={styles.deductionHeader}>
+                <Text style={styles.deductionTitle}>{deduction.label}</Text>
+                <Switch
+                  value={isEnabled}
+                  onValueChange={() => toggleDeduction(deduction.id)}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.background}
+                />
+              </View>
+              <Text style={styles.deductionDescription}>{deduction.description}</Text>
+
+              {isEnabled ? (
+                isUploaded ? (
+                  <View style={styles.uploadedRow}>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                    <Text style={styles.uploadedText}>Document uploaded</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => handleUploadDocument(deduction.id)}
+                    style={styles.uploadPrompt}
+                  >
+                    <Ionicons name="cloud-upload-outline" size={20} color={colors.textSecondary} />
+                    <Text style={styles.uploadPromptText}>
+                      Upload your {deduction.documentLabel}
+                    </Text>
+                  </Pressable>
+                )
+              ) : null}
+            </Card>
+          );
+        })}
       </ScrollView>
 
       <Button
@@ -154,6 +201,10 @@ const styles = StyleSheet.create({
   deductionCard: {
     marginBottom: spacing.sm,
   },
+  deductionCardSelected: {
+    borderWidth: 2,
+    borderColor: colors.backgroundInverse,
+  },
   deductionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -169,6 +220,33 @@ const styles = StyleSheet.create({
   deductionDescription: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  uploadPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm + 4,
+    marginTop: spacing.md,
+  },
+  uploadPromptText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  uploadedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  uploadedText: {
+    ...typography.caption,
+    color: colors.success,
+    fontWeight: '600',
   },
   continueButton: {
     marginTop: spacing.sm,
