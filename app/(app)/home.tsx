@@ -4,13 +4,13 @@
  * bar. Both the card's "Start Filing now" button and the FAB go to the
  * same place: the first screen of the filing flow.
  *
- * The card's folder/document illustration is a placeholder — it's a
- * distinct piece of custom artwork (not just color/type/copy), so like
- * the onboarding illustrations it needs an actual exported asset from
- * Figma rather than being redrawn from a flat screenshot.
+ * The filing card's background is the exported illustration itself (wave
+ * texture + folder graphic baked in as one image) rather than a flat
+ * color with a separate graphic — that's what the asset turned out to be.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { Image } from 'expo-image';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
 import { Screen } from '../../components/layout/Screen';
@@ -21,6 +21,7 @@ import { layout, radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
 const FILING_ROUTE = '/(app)/select-platform' as const;
+const filingIllustration = require('../../assets/images/home-filing-illustration.png');
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -45,12 +46,15 @@ export default function HomeScreen() {
         </Card>
 
         <Card style={styles.filingCard}>
+          <Image
+            source={filingIllustration}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
           <Text style={styles.filingTitle}>File your 2025 tax return</Text>
           <Text style={styles.filingBody}>We&apos;ll guide you through the process, step by step.</Text>
 
-          <View style={styles.illustrationPlaceholder}>
-            <Text style={styles.illustrationPlaceholderText}>Illustration pending</Text>
-          </View>
+          <View style={styles.filingSpacer} />
 
           <Button
             label="Start Filing now"
@@ -106,6 +110,7 @@ const styles = StyleSheet.create({
   filingCard: {
     backgroundColor: colors.forestDeep,
     borderWidth: 0,
+    overflow: 'hidden',
   },
   filingTitle: {
     ...typography.bodyStrong,
@@ -119,20 +124,8 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     marginBottom: spacing.md,
   },
-  illustrationPlaceholder: {
-    height: 140,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  illustrationPlaceholderText: {
-    ...typography.caption,
-    color: colors.textInverse,
-    opacity: 0.7,
+  filingSpacer: {
+    height: 130,
   },
   startFilingButton: {
     alignSelf: 'flex-end',
