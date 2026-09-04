@@ -10,7 +10,6 @@ import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
 const illustration = require('../../assets/images/step-3-illustration.png');
-const ASPECT_RATIO = 776 / 562;
 
 function Step3Illustration() {
   return <Image source={illustration} style={styles.illustration} resizeMode="contain" />;
@@ -35,6 +34,6 @@ export default function OnboardingStepThree() {
 const styles = StyleSheet.create({
   illustration: {
     width: '100%',
-    aspectRatio: ASPECT_RATIO,
+    height: '100%',
   },
 });
