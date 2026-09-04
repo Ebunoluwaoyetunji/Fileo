@@ -5,8 +5,9 @@
  */
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { Image, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
+import { FileoWordmark } from '../../components/ui/FileoWordmark';
 import { colors } from '../../constants/colors';
 import { splashLayout } from '../../constants/theme';
 
@@ -23,11 +24,7 @@ export default function SplashScreen() {
 
   return (
     <Screen edges={[]} backgroundColor={colors.backgroundInverse} style={styles.container}>
-      <Image
-        source={require('../../assets/images/fileo-wordmark.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <FileoWordmark width={splashLayout.logoWidth} height={splashLayout.logoHeight} />
     </Screen>
   );
 }
@@ -37,9 +34,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 0,
     paddingTop: splashLayout.logoTop,
-  },
-  logo: {
-    width: splashLayout.logoWidth,
-    height: splashLayout.logoHeight,
   },
 });
