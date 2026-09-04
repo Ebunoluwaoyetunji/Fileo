@@ -1,11 +1,12 @@
+/**
+ * Create Account — matches the Figma frame the user provided: FILEO
+ * wordmark, "Create your Fileo account" heading, full name / email / phone
+ * / password fields, and a "Login" link for existing users.
+ */
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
-import { Screen } from '../../components/layout/Screen';
-import { Button } from '../../components/ui/Button';
+import { AuthScreen } from '../../components/layout/AuthScreen';
 import { TextField } from '../../components/ui/TextField';
-import { colors } from '../../constants/colors';
-import { spacing, typography } from '../../constants/theme';
 
 export default function CreateAccountScreen() {
   const [fullName, setFullName] = useState('');
@@ -18,13 +19,24 @@ export default function CreateAccountScreen() {
   };
 
   return (
-    <Screen>
-      <Text style={styles.title}>Create your account</Text>
-      <Text style={styles.subtitle}>It only takes a couple of minutes.</Text>
-
-      <TextField label="Full name" placeholder="Ada Lovelace" value={fullName} onChangeText={setFullName} />
+    <AuthScreen
+      headingAccent="Create"
+      headingRest=" your Fileo account"
+      subtitle="Get started with a simpler way to file your taxes"
+      ctaLabel="Create Account"
+      onSubmitCta={handleCreateAccount}
+      bottomText="Already have an account?"
+      bottomLinkLabel="Login"
+      bottomLinkHref="/(auth)/sign-in"
+    >
       <TextField
-        label="Email"
+        label="Full name"
+        placeholder="Ada Lovelace"
+        value={fullName}
+        onChangeText={setFullName}
+      />
+      <TextField
+        label="Email address"
         placeholder="you@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
@@ -33,28 +45,18 @@ export default function CreateAccountScreen() {
       />
       <TextField
         label="Phone number"
-        placeholder="+234"
+        placeholder="+234 800 000 0000"
         keyboardType="phone-pad"
         value={phone}
         onChangeText={setPhone}
       />
-      <TextField label="Password" placeholder="••••••••" secureTextEntry value={password} onChangeText={setPassword} />
-
-      <Button label="Create Account" onPress={handleCreateAccount} />
-    </Screen>
+      <TextField
+        label="Password"
+        placeholder="Create a password"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+      />
+    </AuthScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  title: {
-    ...typography.h1,
-    color: colors.textPrimary,
-    marginTop: spacing.xl,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
-});
