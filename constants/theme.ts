@@ -3,6 +3,7 @@
  * Import `theme` (or the individual named exports) instead of hardcoding
  * numbers in component styles.
  */
+import { Platform } from 'react-native';
 import { colors } from './colors';
 
 export const spacing = {
@@ -28,6 +29,13 @@ export const typography = {
   body: { fontSize: 16, lineHeight: 22, fontWeight: '400' as const },
   bodyStrong: { fontSize: 16, lineHeight: 22, fontWeight: '600' as const },
   caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
+  /** Serif display face used for onboarding headlines (and the wordmark style). */
+  display: {
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '400' as const,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
+  },
 } as const;
 
 export const layout = {
@@ -45,6 +53,19 @@ export const splashLayout = {
   logoTop: 405,
 } as const;
 
+/**
+ * Onboarding carousel (Figma nodes 88:663, 93:942, 90:921): a colored hero
+ * panel (heading, body, illustration) above a white footer (progress dots
+ * + CTA button), shared by steps 1-3.
+ */
+export const onboardingLayout = {
+  dotSize: 8,
+  activeDotWidth: 24,
+  dotGap: spacing.sm,
+  autoAdvanceMs: 4500,
+  swipeThreshold: 50,
+} as const;
+
 export const theme = {
   colors,
   spacing,
@@ -52,6 +73,7 @@ export const theme = {
   typography,
   layout,
   splashLayout,
+  onboardingLayout,
 } as const;
 
 export type Theme = typeof theme;

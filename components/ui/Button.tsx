@@ -11,7 +11,7 @@ import {
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'dark';
 
 type ButtonProps = {
   label: string;
@@ -47,7 +47,9 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.textInverse : colors.primary} />
+        <ActivityIndicator
+          color={variant === 'primary' || variant === 'dark' ? colors.textInverse : colors.primary}
+        />
       ) : (
         <Text style={[styles.label, textVariantStyles[variant]]}>{label}</Text>
       )}
@@ -86,6 +88,9 @@ const variantStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  dark: {
+    backgroundColor: colors.backgroundInverse,
+  },
 });
 
 const textVariantStyles = StyleSheet.create({
@@ -97,5 +102,8 @@ const textVariantStyles = StyleSheet.create({
   },
   ghost: {
     color: colors.textPrimary,
+  },
+  dark: {
+    color: colors.textInverse,
   },
 });

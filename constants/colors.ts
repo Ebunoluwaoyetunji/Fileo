@@ -23,6 +23,10 @@ export const colors = {
   danger: '#D93025',
 
   overlay: 'rgba(17, 20, 23, 0.5)',
+
+  // Onboarding hero gradients (steps 1 and 3 fade down into `background`).
+  forestDeep: '#2C5A48',
+  goldSoft: '#F0CB8E',
 } as const;
 
 export type ColorToken = keyof typeof colors;

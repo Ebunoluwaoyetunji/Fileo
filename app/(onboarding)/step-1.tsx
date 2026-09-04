@@ -1,34 +1,51 @@
-import { router } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
-import { Screen } from '../../components/layout/Screen';
-import { Button } from '../../components/ui/Button';
+/**
+ * Onboarding step 1 — Figma node 88:663 ("File Your Taxes Without the
+ * Stress"). Illustration is a placeholder until the exported SVG for this
+ * frame is available — see the TODO below.
+ */
+import { StyleSheet, Text, View } from 'react-native';
+import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
-import { spacing, typography } from '../../constants/theme';
+
+// TODO: replace with the real illustration once its SVG is exported from
+// Figma (phone mockup + "TAX FORM" / "BANK STATEMENT" document cards).
+function Step1Illustration() {
+  return (
+    <View style={styles.placeholder}>
+      <Text style={styles.placeholderText}>Illustration pending</Text>
+    </View>
+  );
+}
 
 export default function OnboardingStepOne() {
   return (
-    <Screen style={styles.container}>
-      <Text style={styles.title}>File Your Taxes Without the Stress</Text>
-      <Text style={styles.description}>
-        FILEO uses AI to prepare and file your Nigerian tax return in minutes, not weeks.
-      </Text>
-      <Button label="Next" onPress={() => router.push('/(onboarding)/step-2')} />
-    </Screen>
+    <OnboardingScreen
+      step={1}
+      heading="File Your Taxes Without the Stress"
+      body="Prepare and file your tax return in minutes. Fileo handles the hard work, so you don't have to."
+      illustration={<Step1Illustration />}
+      background={{ colors: [colors.forestDeep, colors.background] }}
+      headingColor={colors.textPrimary}
+      bodyColor={colors.textInverse}
+      activeDotColor={colors.primary}
+      nextRoute="/(onboarding)/step-2"
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  placeholder: {
+    width: '100%',
+    height: 280,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    ...typography.h1,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
-  description: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
+  placeholderText: {
+    color: colors.textInverse,
+    opacity: 0.7,
   },
 });

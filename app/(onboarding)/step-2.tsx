@@ -1,35 +1,52 @@
-import { router } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
-import { Screen } from '../../components/layout/Screen';
-import { Button } from '../../components/ui/Button';
+/**
+ * Onboarding step 2 — Figma node 93:942 ("File in Four Simple Steps").
+ * Illustration is a placeholder until the exported SVG for this frame is
+ * available — see the TODO below.
+ */
+import { StyleSheet, Text, View } from 'react-native';
+import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
-import { spacing, typography } from '../../constants/theme';
+
+// TODO: replace with the real illustration once its SVG is exported from
+// Figma (4 connected circles: document, checkmark, party-popper, ₦).
+function Step2Illustration() {
+  return (
+    <View style={styles.placeholder}>
+      <Text style={styles.placeholderText}>Illustration pending</Text>
+    </View>
+  );
+}
 
 export default function OnboardingStepTwo() {
   return (
-    <Screen style={styles.container}>
-      <Text style={styles.title}>File in Four Simple Steps</Text>
-      <Text style={styles.description}>
-        Connect your platforms, upload your documents, review your return, and submit — FILEO
-        handles the tax math for you.
-      </Text>
-      <Button label="Next" onPress={() => router.push('/(onboarding)/step-3')} />
-    </Screen>
+    <OnboardingScreen
+      step={2}
+      heading="File in Four Simple Steps"
+      body="Follow four simple steps to complete your tax filing."
+      illustration={<Step2Illustration />}
+      background={{ colors: [colors.backgroundInverse] }}
+      headingColor={colors.textInverse}
+      bodyColor={colors.textInverse}
+      activeDotColor={colors.backgroundInverse}
+      nextRoute="/(onboarding)/step-3"
+      prevRoute="/(onboarding)/step-1"
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  placeholder: {
+    width: '100%',
+    height: 280,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    ...typography.h1,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
-  description: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
+  placeholderText: {
+    color: colors.textInverse,
+    opacity: 0.7,
   },
 });
