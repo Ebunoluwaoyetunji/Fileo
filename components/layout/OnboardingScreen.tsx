@@ -95,7 +95,11 @@ export function OnboardingScreen({
   return (
     <View style={styles.gestureRoot} {...panResponder.panHandlers}>
       <Screen edges={['top', 'bottom']} style={styles.screen}>
-        <GradientBackground colors={background.colors} style={styles.hero}>
+        <GradientBackground
+          colors={background.colors}
+          style={styles.hero}
+          contentStyle={styles.heroContent}
+        >
           <Text style={[styles.heading, { color: headingColor }]}>{heading}</Text>
           <Text style={[styles.body, { color: bodyColor }]}>{body}</Text>
           <View style={styles.illustration}>{illustration}</View>
@@ -123,6 +127,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   hero: {
+    flex: 1,
+  },
+  heroContent: {
     flex: 1,
     paddingTop: spacing.xl,
     paddingHorizontal: layout.screenPadding,
