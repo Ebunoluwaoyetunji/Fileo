@@ -12,6 +12,7 @@ export default function AppLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="home" />
         <Stack.Screen name="select-platform" />
+        <Stack.Screen name="select-bank" />
         <Stack.Screen name="upload-documents" />
         <Stack.Screen name="income-summary" />
         <Stack.Screen name="deductions" />
