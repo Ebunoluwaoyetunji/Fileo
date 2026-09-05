@@ -8,6 +8,19 @@
  * Upload Documents uses for platforms, namespaced with a "deduction:"
  * prefix so the two don't collide).
  *
+ * Two behaviors have no Figma frame to match, so they're built to fit the
+ * existing patterns instead:
+ *  - Once a document is uploaded, a "Change" link (same link style as
+ *    "Resend code" / "Send upload link to my email" elsewhere) swaps it
+ *    back to the upload prompt so it can be replaced — mock only, same as
+ *    the upload itself.
+ *  - Toggling a category on without uploading its document blocks
+ *    Continue, showing an inline error on that category's upload prompt —
+ *    same red-border-plus-caption pattern TextField uses for its own
+ *    errorMessage. Errors only appear after a Continue attempt (mirroring
+ *    Create Account's on-submit validation) and clear live as each
+ *    category is fixed or toggled back off.
+ *
  * The frame has no amount-entry fields — eligibility is toggle-only — so
  * each category's stored deduction amount is a mock computed figure, not
  * something the user typed in:
@@ -80,8 +93,13 @@ const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
 const documentKey = (deductionId: string) => `deduction:${deductionId}`;
 
 export default function DeductionsScreen() {
-  const { totalIncome, setDeductions, uploadedDocuments, addUploadedDocument } = useFiling();
+  const { totalIncome, setDeductions, uploadedDocuments, addUploadedDocument, removeUploadedDocument } =
+    useFiling();
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
+  // Set on the first Continue attempt; once true, each card's error is
+  // derived live from current state, so it clears itself the moment that
+  // category is fixed (uploaded, or toggled back off) without extra effects.
+  const [hasAttemptedContinue, setHasAttemptedContinue] = useState(false);
 
   // Keep FilingContext in sync as the user toggles, so return-review sees
   // current data even if they navigate away without an explicit save step.
@@ -104,6 +122,23 @@ export default function DeductionsScreen() {
     addUploadedDocument(documentKey(id));
   };
 
+  const handleChangeDocument = (id: string) => {
+    // Mock "replace" — drops the current document so the upload prompt
+    // reappears; tapping it again produces a new mock upload.
+    removeUploadedDocument(documentKey(id));
+  };
+
+  const handleContinue = () => {
+    const hasMissingDocument = DEDUCTION_DEFINITIONS.some(
+      (d) => enabled[d.id] && !uploadedDocuments.includes(documentKey(d.id))
+    );
+    if (hasMissingDocument) {
+      setHasAttemptedContinue(true);
+      return;
+    }
+    router.push('/(app)/return-review');
+  };
+
   return (
     <Screen>
       <ScrollView
@@ -123,6 +158,7 @@ export default function DeductionsScreen() {
         {DEDUCTION_DEFINITIONS.map((deduction) => {
           const isEnabled = !!enabled[deduction.id];
           const isUploaded = uploadedDocuments.includes(documentKey(deduction.id));
+          const showError = hasAttemptedContinue && isEnabled && !isUploaded;
 
           return (
             <Card
@@ -143,19 +179,41 @@ export default function DeductionsScreen() {
               {isEnabled ? (
                 isUploaded ? (
                   <View style={styles.uploadedRow}>
-                    <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                    <Text style={styles.uploadedText}>Document uploaded</Text>
+                    <View style={styles.uploadedLeft}>
+                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                      <Text style={styles.uploadedText}>Document uploaded</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => handleChangeDocument(deduction.id)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.changeLink}>Change</Text>
+                    </Pressable>
                   </View>
                 ) : (
-                  <Pressable
-                    onPress={() => handleUploadDocument(deduction.id)}
-                    style={styles.uploadPrompt}
-                  >
-                    <Ionicons name="cloud-upload-outline" size={20} color={colors.textSecondary} />
-                    <Text style={styles.uploadPromptText}>
-                      Upload your {deduction.documentLabel}
-                    </Text>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      onPress={() => handleUploadDocument(deduction.id)}
+                      style={[styles.uploadPrompt, showError && styles.uploadPromptError]}
+                    >
+                      <Ionicons
+                        name="cloud-upload-outline"
+                        size={20}
+                        color={showError ? colors.danger : colors.textSecondary}
+                      />
+                      <Text
+                        style={[styles.uploadPromptText, showError && styles.uploadPromptTextError]}
+                      >
+                        Upload your {deduction.documentLabel}
+                      </Text>
+                    </Pressable>
+                    {showError ? (
+                      <Text style={styles.errorText}>
+                        Upload your {deduction.documentLabel} to continue.
+                      </Text>
+                    ) : null}
+                  </>
                 )
               ) : null}
             </Card>
@@ -163,11 +221,7 @@ export default function DeductionsScreen() {
         })}
       </ScrollView>
 
-      <Button
-        label="Continue"
-        onPress={() => router.push('/(app)/return-review')}
-        style={styles.continueButton}
-      />
+      <Button label="Continue" onPress={handleContinue} style={styles.continueButton} />
     </Screen>
   );
 }
@@ -237,15 +291,36 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
   },
+  uploadPromptError: {
+    borderColor: colors.danger,
+  },
+  uploadPromptTextError: {
+    color: colors.danger,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.xs,
+  },
   uploadedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    justifyContent: 'space-between',
     marginTop: spacing.md,
+  },
+  uploadedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   uploadedText: {
     ...typography.caption,
     color: colors.success,
+    fontWeight: '600',
+  },
+  changeLink: {
+    ...typography.caption,
+    color: colors.primary,
     fontWeight: '600',
   },
   continueButton: {
