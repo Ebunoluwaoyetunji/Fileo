@@ -25,7 +25,17 @@ import { useFiling } from '../../state/filingContext';
 // glyph, so it's a static asset rather than built from shapes.
 const sealIcon = require('../../assets/images/confirmation-seal-icon.png');
 
+// The stepper reuses the same seal, recolored per step status (outline +
+// checkmark only — the white face stays white at every stage). These are
+// pre-recolored copies of the asset above rather than a runtime tint, since
+// a single-color tint would also flatten the white face to that color.
 type StepStatus = 'completed' | 'in-progress' | 'waiting';
+
+const STEP_SEAL_ICONS: Record<StepStatus, ReturnType<typeof require>> = {
+  completed: require('../../assets/images/confirmation-seal-icon-completed.png'),
+  'in-progress': require('../../assets/images/confirmation-seal-icon-in-progress.png'),
+  waiting: require('../../assets/images/confirmation-seal-icon-waiting.png'),
+};
 
 type Step = {
   id: string;
@@ -83,9 +93,11 @@ export default function ConfirmationScreen() {
           return (
             <View key={step.id} style={styles.stepRow}>
               <View style={styles.stepIconColumn}>
-                <View style={styles.stepIconCircle}>
-                  <Ionicons name="checkmark" size={13} color={colors.backgroundInverse} />
-                </View>
+                <Image
+                  source={STEP_SEAL_ICONS[step.status]}
+                  style={styles.stepSeal}
+                  contentFit="contain"
+                />
                 {!isLast ? <View style={styles.stepConnector} /> : null}
               </View>
               <View style={styles.stepContent}>
@@ -185,15 +197,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: spacing.sm,
   },
-  stepIconCircle: {
+  stepSeal: {
     width: 28,
     height: 28,
-    borderRadius: radii.full,
-    backgroundColor: colors.background,
-    borderWidth: 1.5,
-    borderColor: colors.backgroundInverse,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   stepConnector: {
     width: 2,
