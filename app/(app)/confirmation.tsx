@@ -11,6 +11,7 @@
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
@@ -19,6 +20,10 @@ import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
+
+// Scalloped-seal success icon exported from Figma — not a standard icon-font
+// glyph, so it's a static asset rather than built from shapes.
+const sealIcon = require('../../assets/images/confirmation-seal-icon.png');
 
 type StepStatus = 'completed' | 'in-progress' | 'waiting';
 
@@ -64,12 +69,7 @@ export default function ConfirmationScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.handle} />
 
-      <Ionicons
-        name="checkmark-circle-outline"
-        size={64}
-        color={colors.backgroundInverse}
-        style={styles.icon}
-      />
+      <Image source={sealIcon} style={styles.icon} contentFit="contain" />
       <Text style={styles.title}>Your return has been approved.</Text>
       <Text style={styles.subtitle}>
         We&apos;ll now review your return before submitting it. We&apos;ll keep you updated as
@@ -154,6 +154,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   icon: {
+    width: 64,
+    height: 64,
     alignSelf: 'center',
     marginBottom: spacing.md,
   },
