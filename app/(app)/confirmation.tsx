@@ -12,7 +12,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
@@ -51,8 +51,22 @@ const STATUS_STYLES: Record<StepStatus, { bg: string; text: string; label: strin
 };
 
 export default function ConfirmationScreen() {
-  const { resetFiling } = useFiling();
+  const { resetFiling, recordSubmission } = useFiling();
   const [showDownloadToast, setShowDownloadToast] = useState(false);
+
+  // Record this filing exactly once, the moment the user reaches this
+  // screen — Confirmation has no back button, and the only way back here
+  // is submitting a whole new filing, so "on mount" is a safe stand-in for
+  // "on submit" without return-review needing to know about filingHistory.
+  const hasRecorded = useRef(false);
+  useEffect(() => {
+    if (hasRecorded.current) {
+      return;
+    }
+    hasRecorded.current = true;
+    recordSubmission();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [approvedAt] = useState(() => new Date());
   const approvedTime = approvedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });

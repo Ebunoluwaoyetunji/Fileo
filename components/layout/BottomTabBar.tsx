@@ -1,12 +1,16 @@
 /**
- * Presentational bottom tab bar from the Home Figma frame. Only Home is a
- * real destination today — File/Documents/Profile have no screens or
- * Figma frames yet, so they render but don't navigate anywhere until
- * those exist.
+ * Bottom tab bar from the Home Figma frame. Home and File are real
+ * destinations; Documents and Profile still have no screens or Figma
+ * frames behind them, so they render but don't navigate anywhere yet.
+ *
+ * Previously this component had no onPress handling at all — not even for
+ * Home — which is why tapping File (or anything else) did nothing. Tabs
+ * with a route now navigate via expo-router; tabs without one are a no-op.
  */
 import { Ionicons } from '@expo/vector-icons';
+import { Href, router } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
 
@@ -24,24 +28,46 @@ const TABS: {
   { key: 'profile', label: 'Profile', icon: 'person-outline', iconActive: 'person' },
 ];
 
+const TAB_ROUTES: Partial<Record<TabKey, Href>> = {
+  home: '/(app)/home',
+  file: '/(app)/filing-history',
+};
+
 type BottomTabBarProps = {
   active: TabKey;
 };
 
 export function BottomTabBar({ active }: BottomTabBarProps) {
+  const handlePress = (key: TabKey) => {
+    if (key === active) {
+      return;
+    }
+    const route = TAB_ROUTES[key];
+    if (route) {
+      router.push(route);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {TABS.map((tab) => {
         const isActive = tab.key === active;
         return (
-          <View key={tab.key} style={styles.tab}>
+          <Pressable
+            key={tab.key}
+            onPress={() => handlePress(tab.key)}
+            style={styles.tab}
+            accessibilityRole="button"
+            accessibilityLabel={tab.label}
+            accessibilityState={{ selected: isActive }}
+          >
             <Ionicons
               name={isActive ? tab.iconActive : tab.icon}
               size={22}
               color={isActive ? colors.textPrimary : colors.textSecondary}
             />
             <Text style={[styles.label, isActive && styles.labelActive]}>{tab.label}</Text>
-          </View>
+          </Pressable>
         );
       })}
     </View>

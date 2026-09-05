@@ -21,18 +21,26 @@ import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { layout, radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
+import { useFiling } from '../../state/filingContext';
 
 const FILING_ROUTE = '/(app)/select-platform' as const;
+const FILING_HISTORY_ROUTE = '/(app)/filing-history' as const;
 const filingIllustration = require('../../assets/images/home-filing-illustration.png');
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const { filingHistory } = useFiling();
+  // ⚠️ Placeholder UI (see filing-history.tsx) — same "already filed" data
+  // driving the Filing tab is used here so this card and that tab can't
+  // disagree with each other.
+  const latestFiling = filingHistory[0];
   const firstName = user?.fullName?.trim().split(/\s+/)[0];
   const greeting = firstName ? `Hey ${firstName}` : 'Hey there';
 
   const [showNotificationsToast, setShowNotificationsToast] = useState(false);
 
   const goToFiling = () => router.push(FILING_ROUTE);
+  const goToFilingHistory = () => router.push(FILING_HISTORY_ROUTE);
 
   return (
     <Screen style={styles.screen}>
@@ -65,17 +73,38 @@ export default function HomeScreen() {
             style={StyleSheet.absoluteFill}
             contentFit="cover"
           />
-          <Text style={styles.filingTitle}>File your 2025 tax return</Text>
-          <Text style={styles.filingBody}>We&apos;ll guide you through the process, step by step.</Text>
+          {latestFiling ? (
+            <>
+              <View style={styles.submittedPill}>
+                <Text style={styles.submittedPillText}>{latestFiling.status}</Text>
+              </View>
+              <Text style={styles.filingTitle}>Your {latestFiling.taxYear} return is submitted</Text>
+              <Text style={styles.filingBody}>We&apos;ll notify you of any updates.</Text>
 
-          <View style={styles.filingSpacer} />
+              <View style={styles.filingSpacer} />
 
-          <Button
-            label="Start Filing now"
-            variant="dark"
-            onPress={goToFiling}
-            style={styles.startFilingButton}
-          />
+              <Button
+                label="View filing status"
+                variant="dark"
+                onPress={goToFilingHistory}
+                style={styles.startFilingButton}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.filingTitle}>File your 2025 tax return</Text>
+              <Text style={styles.filingBody}>We&apos;ll guide you through the process, step by step.</Text>
+
+              <View style={styles.filingSpacer} />
+
+              <Button
+                label="Start Filing now"
+                variant="dark"
+                onPress={goToFiling}
+                style={styles.startFilingButton}
+              />
+            </>
+          )}
         </Card>
       </ScrollView>
 
@@ -139,6 +168,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.forestDeep,
     borderWidth: 0,
     overflow: 'hidden',
+  },
+  submittedPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginBottom: spacing.xs,
+  },
+  submittedPillText: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textInverse,
   },
   filingTitle: {
     ...typography.bodyStrong,
