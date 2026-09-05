@@ -84,7 +84,7 @@ export default function ConfirmationScreen() {
             <View key={step.id} style={styles.stepRow}>
               <View style={styles.stepIconColumn}>
                 <View style={styles.stepIconCircle}>
-                  <Ionicons name="checkmark" size={14} color={colors.backgroundInverse} />
+                  <Ionicons name="checkmark" size={13} color={colors.backgroundInverse} />
                 </View>
                 {!isLast ? <View style={styles.stepConnector} /> : null}
               </View>
@@ -187,7 +187,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: radii.full,
-    backgroundColor: colors.backgroundInverse,
+    backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderColor: colors.backgroundInverse,
     alignItems: 'center',
     justifyContent: 'center',
   },
