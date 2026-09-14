@@ -42,55 +42,9 @@ import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { colors } from '../../constants/colors';
+import { DEDUCTION_DEFINITIONS, deductionDocumentKey as documentKey } from '../../constants/deductions';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
-
-type DeductionDefinition = {
-  id: string;
-  label: string;
-  description: string;
-  /** What "Upload your ___" should say for this category's required document. */
-  documentLabel: string;
-  computeAmount: (totalIncome: number) => number;
-};
-
-const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
-  {
-    id: 'rent',
-    label: 'Rent payments',
-    description:
-      'If you paid rent in 2025, you can deduct up to ₦500,000 from your taxable income. Potential saving is up to ₦75,000 off your tax bill.',
-    documentLabel: 'rent receipt',
-    computeAmount: () => 500000,
-  },
-  {
-    id: 'life-assurance',
-    label: 'Life assurance premium',
-    description:
-      'Full premium paid on a life insurance policy. Document needed — insurance premium receipt from a registered insurer.',
-    documentLabel: 'insurance premium receipt',
-    computeAmount: () => 0,
-  },
-  {
-    id: 'pension',
-    label: 'Pension contributions',
-    description:
-      'If you contributed up to 8% of your monthly gross income to a registered PFA. Document needed — annual PFA statement.',
-    documentLabel: 'PFA statement',
-    computeAmount: (totalIncome) => Math.round(totalIncome * 0.08),
-  },
-  {
-    id: 'nhf',
-    label: 'National Housing Fund (NHF)',
-    description:
-      '2.5% of monthly basic salary contributed to Federal Mortgage Bank. Document needed — NHF contribution statement.',
-    documentLabel: 'NHF contribution statement',
-    computeAmount: (totalIncome) => Math.round(totalIncome * 0.025),
-  },
-];
-
-/** Namespaced so this doesn't collide with platform names in the same array. */
-const documentKey = (deductionId: string) => `deduction:${deductionId}`;
 
 export default function DeductionsScreen() {
   const { totalIncome, setDeductions, uploadedDocuments, addUploadedDocument, removeUploadedDocument } =
