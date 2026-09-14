@@ -1,11 +1,6 @@
 /**
- * Bottom tab bar from the Home Figma frame. Home and File are real
- * destinations; Documents and Profile still have no screens or Figma
- * frames behind them, so they render but don't navigate anywhere yet.
- *
- * Previously this component had no onPress handling at all — not even for
- * Home — which is why tapping File (or anything else) did nothing. Tabs
- * with a route now navigate via expo-router; tabs without one are a no-op.
+ * Bottom tab bar from the Home Figma frame. All 4 tabs are now real
+ * destinations.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { Href, router } from 'expo-router';
@@ -31,6 +26,8 @@ const TABS: {
 const TAB_ROUTES: Partial<Record<TabKey, Href>> = {
   home: '/(app)/home',
   file: '/(app)/filing-history',
+  documents: '/(app)/documents',
+  profile: '/(app)/profile',
 };
 
 type BottomTabBarProps = {

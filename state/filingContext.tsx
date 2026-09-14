@@ -5,6 +5,16 @@
  */
 import React, { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 
+/** The one tax year this whole mock flow produces — return-review.tsx's
+ * Filing Information card and recordSubmission() below both use this. */
+export const CURRENT_TAX_YEAR = '2025';
+
+/** Flat, clearly-mock rate — NOT how Nigerian PIT actually works (it's
+ * progressive/bracketed in reality). Shared by return-review.tsx (tax due /
+ * savings on the current in-progress filing) and home.tsx (the "Total
+ * saved" stat, summed across past filings) so both use one number. */
+export const MOCK_TAX_RATE = 0.15;
+
 export type IncomeSource = {
   id: string;
   label: string;
@@ -18,24 +28,66 @@ export type Deduction = {
 };
 
 /**
- * One completed filing. There's only ever one filing flow in the app today
- * (no multi-year support yet), so this is created once, when the user
- * reaches Confirmation — a snapshot of that filing's income/deductions
- * rather than a live reference, so it stays accurate after `resetFiling`
- * clears the in-progress fields for a next filing.
+ * One completed filing. The live flow only ever produces 'Submitted'
+ * entries (via recordSubmission below) — 'Filed' exists so a fully
+ * processed *past* filing can be shown too (see MOCK_PRIOR_FILING), since
+ * there's no real backend to advance a 'Submitted' entry to 'Filed' on its
+ * own.
  */
+export type FilingStatusLabel = 'Submitted' | 'Filed';
+
 export type FilingHistoryEntry = {
   id: string;
-  submittedAt: string; // ISO timestamp, real (not mocked) — the moment Confirmation was reached.
-  status: 'Submitted'; // the only status this prototype produces — see confirmation.tsx.
+  submittedAt: string; // ISO timestamp.
+  status: FilingStatusLabel;
   taxYear: string;
   totalIncome: number;
   totalDeductions: number;
   incomeSources: IncomeSource[];
   deductions: Deduction[];
+  /** Only set once a filing reaches 'Filed' — the amount actually paid. */
+  amountPaid?: number;
 };
 
+/**
+ * ⚠️ Illustrative only — not produced by anything in this app. There's no
+ * real backend to age a 'Submitted' filing into a fully-processed 'Filed'
+ * one with a paid amount and a downloadable certificate, so this one static
+ * "prior year" entry stands in for what that eventually looks like. It's
+ * appended after the real (dynamic) filingHistory entries, and only once
+ * the user has at least one real entry — see filing-history.tsx and
+ * documents.tsx.
+ */
+export const MOCK_PRIOR_FILING: FilingHistoryEntry = {
+  id: 'mock-prior-filing',
+  submittedAt: '2024-09-14T00:00:00.000Z',
+  status: 'Filed',
+  taxYear: '2024',
+  totalIncome: 0,
+  totalDeductions: 0,
+  incomeSources: [],
+  deductions: [],
+  amountPaid: 142000,
+};
+
+/** ⚠️ Illustrative only, same reasoning as MOCK_PRIOR_FILING — the
+ * "document" a real backend would eventually generate once a filing is
+ * fully processed. Used by documents.tsx / document-detail.tsx. */
+export const MOCK_TAX_CLEARANCE_CERTIFICATE = {
+  id: 'mock-tax-clearance-certificate',
+  title: 'Tax clearance certificate 2025',
+  issuedAt: '2025-09-22T00:00:00.000Z',
+  description:
+    'Confirms your tax affairs are up to date with FIRS for the filing period. Some banks, contracts, and government agencies ask for this as proof of compliance.',
+};
+
+/** Distinguishes "never started" from "started but not yet submitted" —
+ * the Filing tab's in-progress state (filing-history.tsx) needs this on
+ * top of filingHistory to know which of its 3 states to show. */
+export type FilingStatus = 'not-started' | 'in-progress';
+
 type FilingState = {
+  filingStatus: FilingStatus;
   selectedPlatforms: string[];
   uploadedDocuments: string[];
   incomeSources: IncomeSource[];
@@ -58,6 +110,7 @@ type FilingContextValue = FilingState & {
 };
 
 const initialState: FilingState = {
+  filingStatus: 'not-started',
   selectedPlatforms: [],
   uploadedDocuments: [],
   incomeSources: [],
@@ -71,15 +124,25 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FilingState>(initialState);
 
   const setSelectedPlatforms = (platforms: string[]) =>
-    setState((prev) => ({ ...prev, selectedPlatforms: platforms }));
-
-  const togglePlatform = (platform: string) =>
     setState((prev) => ({
       ...prev,
-      selectedPlatforms: prev.selectedPlatforms.includes(platform)
-        ? prev.selectedPlatforms.filter((item) => item !== platform)
-        : [...prev.selectedPlatforms, platform],
+      selectedPlatforms: platforms,
+      filingStatus: platforms.length > 0 ? 'in-progress' : prev.filingStatus,
     }));
+
+  const togglePlatform = (platform: string) =>
+    setState((prev) => {
+      const selectedPlatforms = prev.selectedPlatforms.includes(platform)
+        ? prev.selectedPlatforms.filter((item) => item !== platform)
+        : [...prev.selectedPlatforms, platform];
+      return {
+        ...prev,
+        selectedPlatforms,
+        // The first platform picked is what kicks a filing from
+        // "not started" into "in progress" — the Filing tab watches this.
+        filingStatus: selectedPlatforms.length > 0 ? 'in-progress' : prev.filingStatus,
+      };
+    });
 
   const addUploadedDocument = (documentUri: string) =>
     setState((prev) => ({
@@ -105,7 +168,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         id: `filing-${Date.now()}`,
         submittedAt: new Date().toISOString(),
         status: 'Submitted',
-        taxYear: '2025', // matches the static "Tax year" shown on Return Review.
+        taxYear: CURRENT_TAX_YEAR, // matches the static "Tax year" shown on Return Review.
         totalIncome: prev.incomeSources.reduce((sum, item) => sum + item.amount, 0),
         totalDeductions: prev.deductions.reduce((sum, item) => sum + item.amount, 0),
         incomeSources: prev.incomeSources,
@@ -114,9 +177,10 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       return { ...prev, filingHistory: [entry, ...prev.filingHistory] };
     });
 
-  // Clears the in-progress filing fields for a next filing, but keeps
-  // filingHistory — it's called right before returning Home from
-  // Confirmation, and a just-recorded entry shouldn't disappear with it.
+  // Clears the in-progress filing fields (and filingStatus) for a next
+  // filing, but keeps filingHistory — it's called right before returning
+  // Home from Confirmation, and a just-recorded entry shouldn't disappear
+  // with it.
   const resetFiling = () =>
     setState((prev) => ({ ...initialState, filingHistory: prev.filingHistory }));
 

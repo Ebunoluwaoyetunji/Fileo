@@ -25,10 +25,7 @@ import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { Screen } from '../../components/layout/Screen';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
-import { useFiling } from '../../state/filingContext';
-
-// Mock only — see file header.
-const MOCK_TAX_RATE = 0.15;
+import { MOCK_TAX_RATE, useFiling } from '../../state/filingContext';
 
 function formatNaira(amount: number) {
   return `₦${amount.toLocaleString('en-NG')}`;
