@@ -1,19 +1,23 @@
 /**
  * Onboarding step 1 — Figma node 88:663 ("File Your Taxes Without the
- * Stress"). Illustration is a placeholder until the exported SVG for this
- * frame is available — see the TODO below.
+ * Stress"). Illustration: phone mockup showing the FILEO splash with
+ * overlapping "TAX FORM" / "BANK STATEMENT" document cards.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
-// TODO: replace with the real illustration once its SVG is exported from
-// Figma (phone mockup + "TAX FORM" / "BANK STATEMENT" document cards).
+const illustration = require('../../assets/images/step-1-illustration.png');
+
 function Step1Illustration() {
   return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderText}>Illustration pending</Text>
-    </View>
+    <Image
+      source={illustration}
+      style={styles.illustration}
+      contentFit="contain"
+      contentPosition="bottom"
+    />
   );
 }
 
@@ -34,18 +38,8 @@ export default function OnboardingStepOne() {
 }
 
 const styles = StyleSheet.create({
-  placeholder: {
+  illustration: {
     width: '100%',
-    height: 280,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderText: {
-    color: colors.textInverse,
-    opacity: 0.7,
+    height: '100%',
   },
 });

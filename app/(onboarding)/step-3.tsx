@@ -1,21 +1,25 @@
 /**
- * Onboarding step 3 — Figma node 90:921 ("Your Data Is Safe"). Illustration
- * is a placeholder until the exported SVG for this frame is available —
- * see the TODO below. This is the last step: both the auto-advance/swipe
- * and the CTA button finish onboarding and land on create-account.
+ * Onboarding step 3 — Figma node 90:921 ("Your Data Is Safe"). Illustration:
+ * file cabinet with a verified tax return folder + shield/fingerprint/
+ * face-scan/signature badges. This is the last step: both the
+ * auto-advance/swipe and the CTA button finish onboarding and land on
+ * create-account.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { OnboardingScreen } from '../../components/layout/OnboardingScreen';
 import { colors } from '../../constants/colors';
 
-// TODO: replace with the real illustration once its SVG is exported from
-// Figma (file cabinet with a verified tax return + shield/fingerprint/
-// face-scan/signature badges).
+const illustration = require('../../assets/images/step-3-illustration.png');
+
 function Step3Illustration() {
   return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderText}>Illustration pending</Text>
-    </View>
+    <Image
+      source={illustration}
+      style={styles.illustration}
+      contentFit="contain"
+      contentPosition="bottom"
+    />
   );
 }
 
@@ -36,17 +40,8 @@ export default function OnboardingStepThree() {
 }
 
 const styles = StyleSheet.create({
-  placeholder: {
+  illustration: {
     width: '100%',
-    height: 280,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(17,20,23,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderText: {
-    color: colors.textSecondary,
+    height: '100%',
   },
 });

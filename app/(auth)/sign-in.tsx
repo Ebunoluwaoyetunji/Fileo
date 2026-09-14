@@ -1,8 +1,17 @@
+/**
+ * Sign In — from the Figma frame the user provided for this screen (not a
+ * copy of Create Account's layout details, just the same shared AuthScreen
+ * component): fully-accent "Welcome Back" heading, dark subtitle, a plain
+ * dark "Forgot Password?" link, and a "Log In" CTA.
+ *
+ * Auth here is a local mock only: there's no backend yet, so a non-empty
+ * email + password is treated as a successful sign-in. Replace with real
+ * authentication later.
+ */
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { Screen } from '../../components/layout/Screen';
-import { Button } from '../../components/ui/Button';
+import { AuthScreen } from '../../components/layout/AuthScreen';
 import { TextField } from '../../components/ui/TextField';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
@@ -12,78 +21,76 @@ export default function SignInScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
 
   const handleSignIn = () => {
-    signIn({ id: 'local-user', fullName: 'FILEO User', email });
+    const trimmedEmail = email.trim();
+    const missingEmail = trimmedEmail.length === 0;
+    const missingPassword = password.length === 0;
+
+    setEmailError(missingEmail ? 'Enter your email address.' : undefined);
+    setPasswordError(missingPassword ? 'Enter your password.' : undefined);
+
+    if (missingEmail || missingPassword) {
+      return;
+    }
+
+    // Mock sign-in — no backend yet. Any non-empty email/password "succeeds".
+    signIn({ id: 'local-user', fullName: 'FILEO User', email: trimmedEmail });
     router.replace('/(app)/home');
   };
 
   return (
-    <Screen>
-      <Text style={styles.title}>Welcome back</Text>
-      <Text style={styles.subtitle}>Sign in to continue your tax filing.</Text>
-
+    <AuthScreen
+      headingAccent="Welcome Back"
+      headingRest=""
+      subtitle="Manage your tax filing"
+      subtitleColor={colors.textPrimary}
+      ctaLabel="Log In"
+      onSubmitCta={handleSignIn}
+      bottomText="Don't have an account?"
+      bottomLinkLabel="Sign Up"
+      bottomLinkHref="/(auth)/create-account"
+    >
       <TextField
-        label="Email"
+        label="Email address"
         placeholder="you@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+        errorMessage={emailError}
       />
       <TextField
         label="Password"
-        placeholder="••••••••"
+        placeholder="Enter your password"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
+        errorMessage={passwordError}
       />
 
-      <Link href="/(auth)/forgot-password" style={styles.forgotLink}>
-        <Text style={styles.forgotLinkText}>Forgot password?</Text>
-      </Link>
+      <ForgotPasswordLink />
+    </AuthScreen>
+  );
+}
 
-      <Button label="Sign In" onPress={handleSignIn} />
-
-      <Link href="/(auth)/create-account" style={styles.createLink}>
-        <Text style={styles.createLinkText}>
-          Don&apos;t have an account? <Text style={styles.createLinkStrong}>Create one</Text>
-        </Text>
-      </Link>
-    </Screen>
+function ForgotPasswordLink() {
+  return (
+    <Link href="/(auth)/forgot-password" style={styles.forgotLink}>
+      <Text style={styles.forgotLinkText}>Forgot Password?</Text>
+    </Link>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    ...typography.h1,
-    color: colors.textPrimary,
-    marginTop: spacing.xl,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
   forgotLink: {
     alignSelf: 'flex-end',
     marginBottom: spacing.lg,
   },
   forgotLinkText: {
     ...typography.caption,
-    color: colors.primary,
-  },
-  createLink: {
-    marginTop: spacing.lg,
-    alignSelf: 'center',
-  },
-  createLinkText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  createLinkStrong: {
-    color: colors.primary,
-    fontWeight: '600',
+    color: colors.textPrimary,
   },
 });

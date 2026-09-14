@@ -11,7 +11,11 @@ export default function AppLayout() {
     <FilingProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="home" />
+        <Stack.Screen name="filing-history" />
+        <Stack.Screen name="documents" />
+        <Stack.Screen name="document-detail" />
         <Stack.Screen name="select-platform" />
+        <Stack.Screen name="select-bank" />
         <Stack.Screen name="upload-documents" />
         <Stack.Screen name="income-summary" />
         <Stack.Screen name="deductions" />
