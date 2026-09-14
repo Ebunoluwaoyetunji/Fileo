@@ -11,6 +11,7 @@ export default function AppLayout() {
     <FilingProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="home" />
+        <Stack.Screen name="notifications" />
         <Stack.Screen name="filing-history" />
         <Stack.Screen name="documents" />
         <Stack.Screen name="document-detail" />

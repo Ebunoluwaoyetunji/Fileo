@@ -9,6 +9,12 @@ import React, { createContext, ReactNode, useContext, useMemo, useState } from '
  * Filing Information card and recordSubmission() below both use this. */
 export const CURRENT_TAX_YEAR = '2025';
 
+/** Flat, clearly-mock rate — NOT how Nigerian PIT actually works (it's
+ * progressive/bracketed in reality). Shared by return-review.tsx (tax due /
+ * savings on the current in-progress filing) and home.tsx (the "Total
+ * saved" stat, summed across past filings) so both use one number. */
+export const MOCK_TAX_RATE = 0.15;
+
 export type IncomeSource = {
   id: string;
   label: string;

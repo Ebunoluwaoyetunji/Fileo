@@ -17,6 +17,22 @@ import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
+/**
+ * There's no backend to look up a real name for a returning user, so this
+ * derives a plausible one from the email's local part — "sharon.oyelaran@…"
+ * becomes "Sharon Oyelaran" — rather than a static placeholder like "FILEO
+ * User" (which read as literally "Hey FILEO" once Home takes the first
+ * word for its greeting).
+ */
+function deriveNameFromEmail(email: string): string {
+  const localPart = email.split('@')[0] ?? '';
+  const words = localPart.split(/[._-]+/).filter(Boolean);
+  if (words.length === 0) {
+    return 'there';
+  }
+  return words.map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+
 export default function SignInScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
@@ -37,7 +53,7 @@ export default function SignInScreen() {
     }
 
     // Mock sign-in — no backend yet. Any non-empty email/password "succeeds".
-    signIn({ id: 'local-user', fullName: 'FILEO User', email: trimmedEmail });
+    signIn({ id: 'local-user', fullName: deriveNameFromEmail(trimmedEmail), email: trimmedEmail });
     router.replace('/(app)/home');
   };
 

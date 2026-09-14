@@ -52,6 +52,8 @@ type AuthScreenProps = {
   bottomLinkHref?: Href;
   /** A mock local action (e.g. "Resend code") instead of navigation — mutually exclusive with `bottomLinkHref`. */
   bottomLinkOnPress?: () => void;
+  /** Mutes the link and ignores taps — e.g. OTP's "Resend in 30s" cooldown. Only meaningful with `bottomLinkOnPress`. */
+  bottomLinkDisabled?: boolean;
 };
 
 export function AuthScreen({
@@ -69,11 +71,14 @@ export function AuthScreen({
   bottomLinkLabel,
   bottomLinkHref,
   bottomLinkOnPress,
+  bottomLinkDisabled = false,
 }: AuthScreenProps) {
   const bottomLinkContent = bottomLinkLabel ? (
     <Text style={styles.bottomText}>
       {bottomText ? `${bottomText} ` : ''}
-      <Text style={styles.bottomLinkStrong}>{bottomLinkLabel}</Text>
+      <Text style={[styles.bottomLinkStrong, bottomLinkDisabled && styles.bottomLinkStrongDisabled]}>
+        {bottomLinkLabel}
+      </Text>
     </Text>
   ) : null;
 
@@ -108,7 +113,12 @@ export function AuthScreen({
 
           {bottomLinkLabel ? (
             bottomLinkOnPress ? (
-              <Pressable onPress={bottomLinkOnPress} style={styles.bottomLink}>
+              <Pressable
+                onPress={bottomLinkOnPress}
+                disabled={bottomLinkDisabled}
+                accessibilityState={{ disabled: bottomLinkDisabled }}
+                style={styles.bottomLink}
+              >
                 {bottomLinkContent}
               </Pressable>
             ) : (
@@ -166,5 +176,8 @@ const styles = StyleSheet.create({
   bottomLinkStrong: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  bottomLinkStrongDisabled: {
+    color: colors.textSecondary,
   },
 });

@@ -7,7 +7,7 @@
  * actually generate or send anything.
  */
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthScreen } from '../../components/layout/AuthScreen';
 import { OtpInput } from '../../components/ui/OtpInput';
 import { Toast } from '../../components/ui/Toast';
@@ -19,6 +19,7 @@ const FALLBACK_PHONE = '08000000000';
 // Mock delay so the CTA's loading state feels like a real request — there's
 // still no backend underneath, this just avoids an instant, jarring jump.
 const MOCK_VERIFY_DELAY_MS = 900;
+const RESEND_COOLDOWN_SECONDS = 30;
 
 /** Keeps the first/last 2 characters visible, masking the rest — matches
  * the Figma frame's "08******33" pattern. */
@@ -43,6 +44,18 @@ export default function OtpVerificationScreen() {
   const [error, setError] = useState<string | undefined>();
   const [showResendToast, setShowResendToast] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Ticks the cooldown down once a second while it's running; the effect
+  // itself just schedules one tick and cleans up, so it naturally stops
+  // once resendCooldown hits 0 rather than needing its own interval-clear.
+  useEffect(() => {
+    if (resendCooldown <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   const handleVerify = () => {
     if (isVerifying) {
@@ -67,9 +80,13 @@ export default function OtpVerificationScreen() {
   };
 
   const handleResend = () => {
+    if (resendCooldown > 0) {
+      return;
+    }
     setCode('');
     setError(undefined);
     setShowResendToast(true);
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
   };
 
   return (
@@ -82,8 +99,9 @@ export default function OtpVerificationScreen() {
         ctaLabel="Verify"
         onSubmitCta={handleVerify}
         ctaLoading={isVerifying}
-        bottomLinkLabel="Resend code"
+        bottomLinkLabel={resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
         bottomLinkOnPress={handleResend}
+        bottomLinkDisabled={resendCooldown > 0}
       >
         <OtpInput length={CODE_LENGTH} value={code} onChangeValue={setCode} errorMessage={error} />
       </AuthScreen>

@@ -75,8 +75,7 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs / 2,
   },
   title: {
-    ...typography.display,
-    fontSize: 22,
+    ...typography.h2,
     color: colors.textPrimary,
     marginBottom: spacing.xs / 2,
   },
