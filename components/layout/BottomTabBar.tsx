@@ -1,7 +1,6 @@
 /**
- * Bottom tab bar from the Home Figma frame. Home, File, and Documents are
- * now real destinations; Profile still has no screen behind it, so it
- * renders but doesn't navigate anywhere yet.
+ * Bottom tab bar from the Home Figma frame. All 4 tabs are now real
+ * destinations.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { Href, router } from 'expo-router';
@@ -28,6 +27,7 @@ const TAB_ROUTES: Partial<Record<TabKey, Href>> = {
   home: '/(app)/home',
   file: '/(app)/filing-history',
   documents: '/(app)/documents',
+  profile: '/(app)/profile',
 };
 
 type BottomTabBarProps = {

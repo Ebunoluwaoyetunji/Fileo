@@ -40,7 +40,11 @@ function validateIdNumber(value: string, label: string): string | undefined {
 
 export default function IdentityVerificationScreen() {
   const { signIn } = useAuth();
-  const { fullName, email } = useLocalSearchParams<{ fullName?: string; email?: string }>();
+  const { fullName, email, phone } = useLocalSearchParams<{
+    fullName?: string;
+    email?: string;
+    phone?: string;
+  }>();
 
   const [nin, setNin] = useState('');
   const [bvn, setBvn] = useState('');
@@ -70,6 +74,7 @@ export default function IdentityVerificationScreen() {
         id: 'local-user',
         fullName: fullName || 'FILEO User',
         email: email || '',
+        phone: phone || undefined,
       });
       router.replace('/(app)/home');
     }, MOCK_VERIFY_DELAY_MS);

@@ -21,6 +21,10 @@ type AuthContextValue = {
   signIn: (user: AuthUser) => void;
   signOut: () => void;
   completeOnboarding: () => void;
+  /** Merges the given fields into the signed-in user — e.g. Profile's
+   * "Personal information" edit form. No-ops if signed out. Local state
+   * only, same as the rest of this context. */
+  updateUser: (updates: Partial<Omit<AuthUser, 'id'>>) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -39,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn: (nextUser) => setUser(nextUser),
       signOut: () => setUser(null),
       completeOnboarding: () => setHasCompletedOnboarding(true),
+      updateUser: (updates) => setUser((prev) => (prev ? { ...prev, ...updates } : prev)),
     }),
     [user, hasCompletedOnboarding, isLoading]
   );

@@ -74,7 +74,7 @@ export default function OtpVerificationScreen() {
     setTimeout(() => {
       router.push({
         pathname: '/(auth)/identity-verification',
-        params: { fullName: fullName ?? '', email: email ?? '' },
+        params: { fullName: fullName ?? '', email: email ?? '', phone: phone ?? '' },
       });
     }, MOCK_VERIFY_DELAY_MS);
   };
