@@ -20,12 +20,22 @@
  *    app already enforces elsewhere, so "documents still needed" only
  *    lists deduction documents (which genuinely do gate progress, per
  *    deductions.tsx).
+ *    ⚠️ A prior filing shouldn't disappear just because a new one is in
+ *    progress — this state now also lists past filingHistory entries
+ *    (same tappable cards HistoryState uses) below the checklist whenever
+ *    any exist, instead of the in-progress view replacing history
+ *    entirely.
  *  - history (filingHistory has entries, and nothing's in progress): a
  *    list of past filings. Every real filing lands here as 'Submitted' —
  *    there's no backend to age one into a fully-processed 'Filed' return
  *    with a paid amount, so MOCK_PRIOR_FILING (⚠️ illustrative only, see
  *    filingContext.tsx) is appended to show what that eventually looks
- *    like.
+ *    like. Each entry is tappable through to filing-detail.tsx for a
+ *    closer look (status timeline, amounts, what was filed).
+ *
+ * "You haven't filed yet" (NotStartedState) is now genuinely the fallback
+ * of last resort: it only shows when there's no in-progress filing AND no
+ * history at all — not whenever filingStatus happens to be 'not-started'.
  */
 import { Ionicons } from '@expo/vector-icons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -115,8 +125,14 @@ function InProgressState() {
     incomeSources,
     deductions,
     addUploadedDocument,
+    filingHistory,
   } = useFiling();
   const [showHowToToast, setShowHowToToast] = useState(false);
+
+  // Same combined list (real entries + the one illustrative prior year)
+  // HistoryState shows — only once there's at least one real entry, same
+  // rule as home.tsx and documents.tsx use.
+  const pastEntries = filingHistory.length > 0 ? [...filingHistory, MOCK_PRIOR_FILING] : [];
 
   const manualPlatforms = selectedPlatforms.filter((p) => !isNigerianBank(p));
   const documentsUploadedComplete =
@@ -204,6 +220,15 @@ function InProgressState() {
             ))}
           </>
         ) : null}
+
+        {pastEntries.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Filing History</Text>
+            {pastEntries.map((entry) => (
+              <HistoryCard key={entry.id} entry={entry} />
+            ))}
+          </>
+        ) : null}
       </ScrollView>
 
       <Button
@@ -226,16 +251,27 @@ function HistoryCard({ entry }: { entry: FilingHistoryEntry }) {
   const [showReceiptToast, setShowReceiptToast] = useState(false);
   const isFiled = entry.status === 'Filed';
 
+  const goToDetail = () =>
+    router.push({ pathname: '/(app)/filing-detail', params: { id: entry.id } });
+
   return (
-    <Card style={styles.filingCard}>
-      <View style={styles.filingCardHeader}>
-        <Text style={styles.taxYear}>{entry.taxYear} tax return</Text>
-        <View style={[styles.statusPill, isFiled && styles.statusPillMuted]}>
-          <Text style={[styles.statusPillText, isFiled && styles.statusPillTextMuted]}>
-            {entry.status}
-          </Text>
+    <Pressable
+      onPress={goToDetail}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${entry.taxYear} tax return details`}
+    >
+      <Card style={styles.filingCard}>
+        <View style={styles.filingCardHeader}>
+          <Text style={styles.taxYear}>{entry.taxYear} tax return</Text>
+          <View style={styles.filingCardHeaderRight}>
+            <View style={[styles.statusPill, isFiled && styles.statusPillMuted]}>
+              <Text style={[styles.statusPillText, isFiled && styles.statusPillTextMuted]}>
+                {entry.status}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+          </View>
         </View>
-      </View>
 
       {isFiled ? (
         <View style={styles.filedRow}>
@@ -277,12 +313,13 @@ function HistoryCard({ entry }: { entry: FilingHistoryEntry }) {
         </>
       )}
 
-      <Toast
-        visible={showReceiptToast}
-        message="Downloading a receipt isn't available in this preview yet."
-        onHide={() => setShowReceiptToast(false)}
-      />
-    </Card>
+        <Toast
+          visible={showReceiptToast}
+          message="Downloading a receipt isn't available in this preview yet."
+          onHide={() => setShowReceiptToast(false)}
+        />
+      </Card>
+    </Pressable>
   );
 }
 
@@ -470,6 +507,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.xs,
+  },
+  filingCardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   taxYear: {
     ...typography.bodyStrong,

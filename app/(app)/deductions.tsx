@@ -39,6 +39,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
+import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { colors } from '../../constants/colors';
@@ -95,6 +96,7 @@ export default function DeductionsScreen() {
 
   return (
     <Screen>
+      <BackButton />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
