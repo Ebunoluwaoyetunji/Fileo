@@ -8,8 +8,13 @@
  * "Confirm signup" email template sends {{ .Token }}, i.e. a 6-digit code):
  *   signUp()  -> Supabase emails a code, no session yet
  *   verifySignUpCode() -> code accepted, session created
- *   recordIdentityVerification() -> masked NIN/BVN + identity_verified
- *     written to the user's profile row
+ *   Identity Verification screen -> verify-identity Edge Function checks
+ *     NIN + BVN server-side and updates the profile row; the screen then
+ *     calls refreshProfile() to pick up identity_verified.
+ *
+ * The app can't write identity_verified, the identity_* columns or the
+ * masked NIN/BVN — a database trigger rejects that from signed-in users.
+ * Only the Edge Function (service role) can.
  *
  * Every action resolves (never throws) with a display-ready `error` string
  * or null, so screens can drop it straight into a field error or toast.
@@ -34,6 +39,10 @@ export type Profile = {
   bvn_masked: string | null;
   nin_masked: string | null;
   identity_verified: boolean;
+  identity_verified_at: string | null;
+  identity_check_type: 'bvn' | 'nin' | null;
+  identity_provider: string | null;
+  identity_reference: string | null;
   created_at: string;
 };
 
@@ -51,9 +60,8 @@ type SignUpInput = {
   password: string;
 };
 
-type ProfileWrite = Partial<
-  Pick<Profile, 'full_name' | 'phone' | 'nin_masked' | 'bvn_masked' | 'identity_verified'>
->;
+/** The only profile fields the app itself may change. */
+type ProfileWrite = Partial<Pick<Profile, 'full_name' | 'phone'>>;
 
 type AuthContextValue = {
   session: Session | null;
@@ -73,12 +81,11 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signOut: () => Promise<AuthResult>;
   /** Profile's "Personal information" edit form. */
-  updateProfile: (updates: Pick<ProfileWrite, 'full_name' | 'phone'>) => Promise<AuthResult>;
-  /** Mock identity check result (11-digit format only — no real NIN/BVN
-   * provider yet). Only masked values ever leave the device: the raw
-   * numbers are masked here, before the network call, and the table's
-   * check constraints reject anything that isn't masked anyway. */
-  recordIdentityVerification: (ids: { nin: string; bvn: string }) => Promise<AuthResult>;
+  updateProfile: (updates: ProfileWrite) => Promise<AuthResult>;
+  /** Re-reads the signed-in user's profile row (e.g. after the server has
+   * verified their identity) and returns it, or null if it couldn't be
+   * loaded. */
+  refreshProfile: () => Promise<Profile | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -105,12 +112,6 @@ function toAuthResult(error: { message: string; code?: string; name?: string; st
   }
   const friendly = error.code ? FRIENDLY_AUTH_MESSAGES[error.code] : undefined;
   return { error: friendly ?? error.message, code: error.code };
-}
-
-/** 11-digit NIN/BVN -> "*******1234": the exact shape the profiles table's
- * check constraints accept, keeping only the last 4 digits. */
-function maskIdNumber(value: string) {
-  return `${'*'.repeat(7)}${value.slice(-4)}`;
 }
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
@@ -192,6 +193,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [userId]
   );
 
+  const refreshProfile = useCallback(async (): Promise<Profile | null> => {
+    if (!userId) {
+      return null;
+    }
+    const nextProfile = await fetchProfile(userId);
+    // Keep the last good copy if the refetch fails, rather than making the
+    // rest of the app think there's no profile.
+    if (nextProfile) {
+      setLoadedProfile({ userId, profile: nextProfile });
+    }
+    return nextProfile;
+  }, [userId]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -267,14 +281,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       updateProfile: (updates) => writeProfile(updates),
 
-      recordIdentityVerification: ({ nin, bvn }) =>
-        writeProfile({
-          nin_masked: maskIdNumber(nin),
-          bvn_masked: maskIdNumber(bvn),
-          identity_verified: true,
-        }),
+      refreshProfile,
     }),
-    [session, profile, isLoading, hasCompletedOnboarding, writeProfile]
+    [session, profile, isLoading, hasCompletedOnboarding, writeProfile, refreshProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
