@@ -1,10 +1,17 @@
 /**
  * OTP Verification — from the Figma frame: 6 individual code boxes, a
- * masked phone number, "Resend code", and a "Verify" CTA.
+ * masked destination, "Resend code", and a "Verify" CTA.
  *
- * Mock-only: there's no real OTP service, so "123456" is the one code
- * that's treated as correct. Resend just re-shows the toast — it doesn't
- * actually generate or send anything.
+ * Real Supabase email OTP: signUp() (Create Account) makes Supabase email a
+ * 6-digit code — the project's "Confirm signup" template sends {{ .Token }}
+ * rather than a confirmation link — and this screen confirms it with
+ * verifyOtp(), which also signs the user in. Success hands off to
+ * app/index.tsx, which sends a new account on to Identity Verification.
+ *
+ * ⚠️ Copy change from the Figma frame: it said the code was sent "via SMS
+ * to the number 08******33". The code now really goes to the user's email,
+ * so the subtitle says that instead (SMS would need a Supabase phone
+ * provider like Twilio, which isn't set up).
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -12,39 +19,35 @@ import { AuthScreen } from '../../components/layout/AuthScreen';
 import { OtpInput } from '../../components/ui/OtpInput';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
+import { useAuth } from '../../state/authContext';
 
-const MOCK_VALID_CODE = '123456';
 const CODE_LENGTH = 6;
-const FALLBACK_PHONE = '08000000000';
-// Mock delay so the CTA's loading state feels like a real request — there's
-// still no backend underneath, this just avoids an instant, jarring jump.
-const MOCK_VERIFY_DELAY_MS = 900;
-const RESEND_COOLDOWN_SECONDS = 30;
+// Matches Supabase's default minimum interval between emails to the same
+// address (60s) — a shorter cooldown here would just let the user tap
+// Resend into a rate-limit error. Starts running on arrival, since a code
+// was sent moments ago by Create Account (or by Sign In, for an account
+// that was never verified).
+const RESEND_COOLDOWN_SECONDS = 60;
 
-/** Keeps the first/last 2 characters visible, masking the rest — matches
- * the Figma frame's "08******33" pattern. */
-function maskPhone(phone: string) {
-  if (phone.length <= 4) {
-    return phone;
+/** "sharon.oyelaran@gmail.com" -> "sh************@gmail.com": enough to
+ * recognise which inbox to check without printing the full address. */
+function maskEmail(email: string) {
+  const [localPart, domain] = email.split('@');
+  if (!domain || localPart.length <= 2) {
+    return email;
   }
-  const start = phone.slice(0, 2);
-  const end = phone.slice(-2);
-  return `${start}${'*'.repeat(phone.length - 4)}${end}`;
+  return `${localPart.slice(0, 2)}${'*'.repeat(localPart.length - 2)}@${domain}`;
 }
 
 export default function OtpVerificationScreen() {
-  const { phone, fullName, email } = useLocalSearchParams<{
-    phone?: string;
-    fullName?: string;
-    email?: string;
-  }>();
-  const maskedPhone = maskPhone(phone || FALLBACK_PHONE);
+  const { verifySignUpCode, resendSignUpCode } = useAuth();
+  const { email } = useLocalSearchParams<{ email?: string }>();
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | undefined>();
-  const [showResendToast, setShowResendToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN_SECONDS);
 
   // Ticks the cooldown down once a second while it's running; the effect
   // itself just schedules one tick and cleans up, so it naturally stops
@@ -57,36 +60,38 @@ export default function OtpVerificationScreen() {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     if (isVerifying) {
+      return;
+    }
+    if (!email) {
+      setError('Something went wrong. Go back and create your account again.');
       return;
     }
     if (code.length < CODE_LENGTH) {
       setError('Enter the 6-digit code.');
       return;
     }
-    if (code !== MOCK_VALID_CODE) {
-      setError('Incorrect code. Please try again.');
-      return;
-    }
     setError(undefined);
     setIsVerifying(true);
-    setTimeout(() => {
-      router.push({
-        pathname: '/(auth)/identity-verification',
-        params: { fullName: fullName ?? '', email: email ?? '', phone: phone ?? '' },
-      });
-    }, MOCK_VERIFY_DELAY_MS);
+    const result = await verifySignUpCode(email, code);
+    setIsVerifying(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    router.replace('/');
   };
 
-  const handleResend = () => {
-    if (resendCooldown > 0) {
+  const handleResend = async () => {
+    if (resendCooldown > 0 || !email) {
       return;
     }
     setCode('');
     setError(undefined);
-    setShowResendToast(true);
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    const result = await resendSignUpCode(email);
+    setToastMessage(result.error ?? 'A new verification code has been sent to your email.');
   };
 
   return (
@@ -94,7 +99,11 @@ export default function OtpVerificationScreen() {
       <AuthScreen
         headingAccent="Verification Code"
         headingAccentColor={colors.textPrimary}
-        subtitle={`We sent a 6-digit code via SMS to the number ${maskedPhone}`}
+        subtitle={
+          email
+            ? `We sent a 6-digit code to your email ${maskEmail(email)}`
+            : 'We sent a 6-digit code to your email'
+        }
         subtitleColor={colors.textPrimary}
         ctaLabel="Verify"
         onSubmitCta={handleVerify}
@@ -107,9 +116,9 @@ export default function OtpVerificationScreen() {
       </AuthScreen>
 
       <Toast
-        visible={showResendToast}
-        message="A new verification code has been sent to your email and phone number."
-        onHide={() => setShowResendToast(false)}
+        visible={toastMessage !== null}
+        message={toastMessage ?? ''}
+        onHide={() => setToastMessage(null)}
       />
     </>
   );

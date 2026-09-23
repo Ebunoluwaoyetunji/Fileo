@@ -11,11 +11,11 @@
  *  - The compliance badge's wording/content ("FIRS Compliant") is a
  *    placeholder — it IS wired to real data (filingHistory), just the
  *    copy/visual treatment is a guess.
- *  - Linked Identity shows placeholder masked NIN/BVN, not the user's
- *    real digits — identity-verification.tsx deliberately discards the
- *    raw values right after validating them (never logs or stores them),
- *    and that's a real privacy decision from earlier in this project, not
- *    an oversight to reverse here.
+ *  - Name/email and Linked Identity come from the user's Supabase profiles
+ *    row. Linked Identity shows the masked NIN/BVN stored at Identity
+ *    Verification (last 4 digits only — the raw numbers are never stored
+ *    anywhere, and the table's check constraints reject unmasked values).
+ *    The "verification" behind it is still a format-only mock.
  *  - Active Sessions is mock data (no real session backend exists).
  *  - Preferences/2FA toggles and Change Password are local-only, no real
  *    settings or auth backend.
@@ -38,6 +38,11 @@ import { useAuth } from '../../state/authContext';
 import { useFiling } from '../../state/filingContext';
 
 type ModalKey = 'compliance' | 'password' | 'identity' | 'sessions' | 'signOut';
+
+/** Stored as "*******1234" (the DB's required shape) — shown with bullets. */
+function formatMaskedId(masked: string | null | undefined) {
+  return masked ? masked.replace(/\*/g, '•') : 'Not provided';
+}
 
 type MockSession = {
   id: string;
@@ -114,7 +119,8 @@ function Row({
 }
 
 export default function ProfileScreen() {
-  const { user, signOut, updateUser } = useAuth();
+  const { user, profile, signOut } = useAuth();
+  const isIdentityVerified = profile?.identity_verified === true;
   const { filingHistory } = useFiling();
   const isCompliant = filingHistory.length > 0;
 
@@ -134,8 +140,11 @@ export default function ProfileScreen() {
 
   const [sessions, setSessions] = useState(INITIAL_SESSIONS);
   const [showRevokeToast, setShowRevokeToast] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const fullName = user?.fullName?.trim() || 'FILEO User';
+  const fullName = profile?.full_name?.trim() || 'FILEO User';
+  const email = profile?.email || user?.email;
   const initials = getInitials(fullName);
 
   const goToPersonalInfo = () => router.push('/(app)/edit-profile');
@@ -164,10 +173,19 @@ export default function ProfileScreen() {
     setShowRevokeToast(true);
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    if (isSigningOut) {
+      return;
+    }
+    setIsSigningOut(true);
+    const result = await signOut();
+    setIsSigningOut(false);
     closeModal();
-    signOut();
-    router.replace('/(auth)/sign-in');
+    // On success there's nothing to navigate here: the session is gone, so
+    // the (app) layout's auth guard redirects to Sign In by itself.
+    if (result.error) {
+      setSignOutError(result.error);
+    }
   };
 
   return (
@@ -178,7 +196,7 @@ export default function ProfileScreen() {
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
           <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.email}>{user?.email || 'No email on file'}</Text>
+          <Text style={styles.email}>{email || 'No email on file'}</Text>
 
           <Pressable
             onPress={() => setActiveModal('compliance')}
@@ -386,29 +404,32 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sheetTitle}>Linked identity</Text>
             <Text style={styles.sheetBody}>
-              Verified during sign-up. FILEO never stores your full NIN/BVN — only enough to
-              confirm they were checked.
+              {isIdentityVerified
+                ? 'Verified during sign-up. FILEO never stores your full NIN/BVN — only the last 4 digits, so you can tell which ones were checked.'
+                : 'Your NIN and BVN haven’t been verified yet.'}
             </Text>
-            <View style={styles.identityRow}>
-              <View style={styles.identityLeft}>
-                <Text style={styles.identityLabel}>NIN</Text>
-                <Text style={styles.identityValue}>•••••••••12</Text>
+            {[
+              { label: 'NIN', masked: profile?.nin_masked },
+              { label: 'BVN', masked: profile?.bvn_masked },
+            ].map((item, index) => (
+              <View
+                key={item.label}
+                style={[styles.identityRow, index === 1 && styles.identityRowLast]}
+              >
+                <View style={styles.identityLeft}>
+                  <Text style={styles.identityLabel}>{item.label}</Text>
+                  <Text style={styles.identityValue}>{formatMaskedId(item.masked)}</Text>
+                </View>
+                {isIdentityVerified ? (
+                  <View style={styles.identityVerified}>
+                    <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                    <Text style={styles.identityVerifiedText}>Verified</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.identityUnverifiedText}>Not verified</Text>
+                )}
               </View>
-              <View style={styles.identityVerified}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                <Text style={styles.identityVerifiedText}>Verified</Text>
-              </View>
-            </View>
-            <View style={[styles.identityRow, styles.identityRowLast]}>
-              <View style={styles.identityLeft}>
-                <Text style={styles.identityLabel}>BVN</Text>
-                <Text style={styles.identityValue}>•••••••••34</Text>
-              </View>
-              <View style={styles.identityVerified}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                <Text style={styles.identityVerifiedText}>Verified</Text>
-              </View>
-            </View>
+            ))}
             <Button label="Close" variant="secondary" onPress={closeModal} style={styles.sheetButtonSpacing} />
           </View>
         ) : null}
@@ -444,7 +465,7 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sheetTitle}>Sign out?</Text>
             <Text style={styles.sheetBody}>You&apos;ll need to sign in again to access your account.</Text>
-            <Button label="Sign out" variant="dark" onPress={handleSignOut} />
+            <Button label="Sign out" variant="dark" onPress={handleSignOut} loading={isSigningOut} />
             <Button label="Cancel" variant="ghost" onPress={closeModal} style={styles.sheetButtonSpacing} />
           </View>
         ) : null}
@@ -459,6 +480,11 @@ export default function ProfileScreen() {
         visible={showRevokeToast}
         message="Session revoked."
         onHide={() => setShowRevokeToast(false)}
+      />
+      <Toast
+        visible={signOutError !== null}
+        message={signOutError ?? ''}
+        onHide={() => setSignOutError(null)}
       />
     </Screen>
   );
@@ -605,6 +631,11 @@ const styles = StyleSheet.create({
   identityVerifiedText: {
     ...typography.caption,
     color: colors.success,
+    fontWeight: '600',
+  },
+  identityUnverifiedText: {
+    ...typography.caption,
+    color: colors.warning,
     fontWeight: '600',
   },
   sessionRow: {

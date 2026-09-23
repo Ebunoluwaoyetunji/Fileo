@@ -1,12 +1,28 @@
 /**
- * Layout for the authenticated filing flow. Wraps every screen in
+ * Layout for the authenticated part of the app. Wraps every screen in
  * FilingProvider so filing state (platforms, income, deductions) persists
  * across the whole (app) group and resets when the flow is left.
+ *
+ * Also the auth guard for this group: with no Supabase session (signed
+ * out, session expired and couldn't refresh, or a direct web link to e.g.
+ * /home), every (app) screen redirects to Sign In. That's also what moves
+ * the user off Profile after "Sign out".
  */
-import { Stack } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
+import { useAuth } from '../../state/authContext';
 import { FilingProvider } from '../../state/filingContext';
 
 export default function AppLayout() {
+  const { isLoading, session } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/sign-in" />;
+  }
+
   return (
     <FilingProvider>
       <Stack screenOptions={{ headerShown: false }}>

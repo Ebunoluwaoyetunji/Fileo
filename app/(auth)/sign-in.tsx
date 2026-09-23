@@ -4,43 +4,33 @@
  * component): fully-accent "Welcome Back" heading, dark subtitle, a plain
  * dark "Forgot Password?" link, and a "Log In" CTA.
  *
- * Auth here is a local mock only: there's no backend yet, so a non-empty
- * email + password is treated as a successful sign-in. Replace with real
- * authentication later.
+ * Real Supabase email/password sign-in. On success it hands off to
+ * app/index.tsx, which decides between Home and (if the account never
+ * finished it) Identity Verification.
  */
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { AuthScreen } from '../../components/layout/AuthScreen';
 import { TextField } from '../../components/ui/TextField';
+import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
-/**
- * There's no backend to look up a real name for a returning user, so this
- * derives a plausible one from the email's local part — "sharon.oyelaran@…"
- * becomes "Sharon Oyelaran" — rather than a static placeholder like "FILEO
- * User" (which read as literally "Hey FILEO" once Home takes the first
- * word for its greeting).
- */
-function deriveNameFromEmail(email: string): string {
-  const localPart = email.split('@')[0] ?? '';
-  const words = localPart.split(/[._-]+/).filter(Boolean);
-  if (words.length === 0) {
-    return 'there';
-  }
-  return words.map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase()).join(' ');
-}
-
 export default function SignInScreen() {
-  const { signIn } = useAuth();
+  const { signIn, resendSignUpCode } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
+    if (isSubmitting) {
+      return;
+    }
     const trimmedEmail = email.trim();
     const missingEmail = trimmedEmail.length === 0;
     const missingPassword = password.length === 0;
@@ -52,43 +42,77 @@ export default function SignInScreen() {
       return;
     }
 
-    // Mock sign-in — no backend yet. Any non-empty email/password "succeeds".
-    signIn({ id: 'local-user', fullName: deriveNameFromEmail(trimmedEmail), email: trimmedEmail });
-    router.replace('/(app)/home');
+    setIsSubmitting(true);
+    const result = await signIn(trimmedEmail, password);
+
+    if (result.code === 'email_not_confirmed') {
+      // Signed up but never entered their code (e.g. closed the app on OTP
+      // Verification). Send a fresh one and pick up where they left off,
+      // rather than showing an error they have no way to act on. If the
+      // resend is rate-limited, the code from their earlier email still
+      // works on that screen.
+      await resendSignUpCode(trimmedEmail);
+      setIsSubmitting(false);
+      router.push({ pathname: '/(auth)/otp-verification', params: { email: trimmedEmail } });
+      return;
+    }
+
+    setIsSubmitting(false);
+    if (result.error) {
+      if (result.code === 'invalid_credentials') {
+        setPasswordError(result.error);
+      } else {
+        setToastMessage(result.error);
+      }
+      return;
+    }
+
+    router.replace('/');
   };
 
   return (
-    <AuthScreen
-      headingAccent="Welcome Back"
-      headingRest=""
-      subtitle="Manage your tax filing"
-      subtitleColor={colors.textPrimary}
-      ctaLabel="Log In"
-      onSubmitCta={handleSignIn}
-      bottomText="Don't have an account?"
-      bottomLinkLabel="Sign Up"
-      bottomLinkHref="/(auth)/create-account"
-    >
-      <TextField
-        label="Email address"
-        placeholder="you@example.com"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        errorMessage={emailError}
-      />
-      <TextField
-        label="Password"
-        placeholder="Enter your password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        errorMessage={passwordError}
-      />
+    <>
+      <AuthScreen
+        headingAccent="Welcome Back"
+        headingRest=""
+        subtitle="Manage your tax filing"
+        subtitleColor={colors.textPrimary}
+        ctaLabel="Log In"
+        onSubmitCta={handleSignIn}
+        ctaLoading={isSubmitting}
+        bottomText="Don't have an account?"
+        bottomLinkLabel="Sign Up"
+        bottomLinkHref="/(auth)/create-account"
+      >
+        <TextField
+          label="Email address"
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          errorMessage={emailError}
+        />
+        <TextField
+          label="Password"
+          placeholder="Enter your password"
+          secureTextEntry
+          autoComplete="current-password"
+          value={password}
+          onChangeText={setPassword}
+          errorMessage={passwordError}
+        />
 
-      <ForgotPasswordLink />
-    </AuthScreen>
+        <ForgotPasswordLink />
+      </AuthScreen>
+
+      <Toast
+        visible={toastMessage !== null}
+        message={toastMessage ?? ''}
+        onHide={() => setToastMessage(null)}
+      />
+    </>
   );
 }
 

@@ -1,0 +1,18 @@
+# Force these as binary (no EOL conversion, no text diffing) regardless of
+# any contributor's local core.autocrlf setting. Without this, git falls
+# back to heuristic content-sniffing per machine, which is exactly the kind
+# of platform-dependent gap that produces spurious byte-for-byte diffs on
+# files nobody actually changed — the repeated conflicts on
+# assets/images/step-3-illustration.png (and any other image) came from
+# relying on that heuristic instead of an explicit rule.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
