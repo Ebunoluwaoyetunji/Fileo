@@ -15,7 +15,8 @@
  *   400  status: 'invalid_request'   bad JSON, type or number
  *   401  status: 'unauthorized'      no or invalid session
  *   405  status: 'invalid_request'   not a POST
- *   429  status: 'rate_limited'      5+ attempts in the last 24 hours
+ *   429  status: 'rate_limited'      5+ verified/mismatch/not_found results
+ *                                    in the last 24 hours (errors don't count)
  *   500  status: 'error'             our own failure (database, config)
  *
  * An already-verified user gets 'verified' straight away, without using an
@@ -34,6 +35,8 @@ import {
 } from '../_shared/identity/index.ts';
 
 const MAX_ATTEMPTS_PER_DAY = 5;
+/** Results that use up one of the day's attempts. 'error' is left out. */
+const RATE_LIMITED_RESULTS: IdentityCheckStatus[] = ['verified', 'mismatch', 'not_found'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CHECK_LABEL: Record<IdentityCheckType, string> = { bvn: 'BVN', nin: 'NIN' };
 
@@ -150,13 +153,16 @@ async function handle(req: Request): Promise<Response> {
     return reply(200, 'verified', MESSAGES.fully_verified);
   }
 
-  // 4. Rate limit. If the count can't be read, refuse rather than risk
-  //    unlimited provider calls.
+  // 4. Rate limit. Only real answers count: provider 'error' results are
+  //    still logged below but don't use up the user's attempts, since they
+  //    say nothing about the number. If the count can't be read, refuse
+  //    rather than risk unlimited provider calls.
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const { count, error: countError } = await admin
     .from('identity_verification_attempts')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', user.id)
+    .in('result', RATE_LIMITED_RESULTS)
     .gte('created_at', since);
   if (countError || count === null) {
     console.error('verify-identity: could not count attempts', countError?.message);
