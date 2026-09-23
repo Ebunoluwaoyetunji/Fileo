@@ -11,6 +11,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
+import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { colors } from '../../constants/colors';
@@ -34,6 +35,7 @@ export default function SelectPlatformScreen() {
 
   return (
     <Screen>
+      <BackButton />
       <FilingProgressBar step={1} />
       <Text style={styles.title}>Select all the platforms you received payments from</Text>
 

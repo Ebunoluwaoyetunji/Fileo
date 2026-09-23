@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
+import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -106,6 +107,7 @@ export default function IncomeSummaryScreen() {
 
   return (
     <Screen>
+      <BackButton />
       <FilingProgressBar step={3} />
       <Text style={styles.title}>Review your income</Text>
       <Text style={styles.subtitle}>

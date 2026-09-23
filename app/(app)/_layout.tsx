@@ -16,6 +16,7 @@ export default function AppLayout() {
         <Stack.Screen name="info-page" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="filing-history" />
+        <Stack.Screen name="filing-detail" />
         <Stack.Screen name="documents" />
         <Stack.Screen name="document-detail" />
         <Stack.Screen name="select-platform" />

@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
+import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
@@ -41,8 +42,10 @@ function manualUploadDescription(platform: string): string {
 }
 
 export default function UploadDocumentsScreen() {
-  const { selectedPlatforms, uploadedDocuments, addUploadedDocument } = useFiling();
+  const { selectedPlatforms, uploadedDocuments, addUploadedDocument, removeUploadedDocument } =
+    useFiling();
   const [showEmailToast, setShowEmailToast] = useState(false);
+  const [showUploadToast, setShowUploadToast] = useState(false);
 
   const bankPlatforms = selectedPlatforms.filter(isNigerianBank);
   const manualPlatforms = selectedPlatforms.filter((platform) => !isNigerianBank(platform));
@@ -51,8 +54,19 @@ export default function UploadDocumentsScreen() {
   const allCovered = pendingManualPlatforms.length === 0;
 
   const handleUpload = (platform: string) => {
-    // Mock upload only — no file picker or real transfer.
+    // Mock upload only — no file picker or real transfer. Auto-pull banks
+    // land here too: auto-pull is informational, not a block on a manual
+    // upload the user chooses to do anyway (e.g. as a fallback or a
+    // preference), so this always succeeds regardless of platform type.
     addUploadedDocument(platform);
+    setShowUploadToast(true);
+  };
+
+  // Bank cards get a "Change" affordance (matching deductions.tsx's own
+  // upload/replace pattern) so a manual upload done for a bank can be
+  // undone/redone — auto-pull keeps covering it either way.
+  const handleRemoveManualUpload = (platform: string) => {
+    removeUploadedDocument(platform);
   };
 
   const handleSendEmailLink = () => {
@@ -65,6 +79,7 @@ export default function UploadDocumentsScreen() {
 
   return (
     <Screen>
+      <BackButton />
       <FilingProgressBar step={2} />
       <Text style={styles.title}>Upload your tax documents</Text>
       <Text style={styles.subtitle}>
@@ -80,34 +95,60 @@ export default function UploadDocumentsScreen() {
         {bankPlatforms.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Nigerian accounts — auto pulled</Text>
-            {bankPlatforms.map((bank) => (
-              <Card key={bank} style={styles.bankCard}>
-                <View style={styles.bankHeader}>
-                  <PlatformIcon label={bank} size={36} />
-                  <Text style={styles.bankName}>{bank}</Text>
-                  <Text style={styles.pulledLabel}>Automatically pulled</Text>
-                </View>
-                <View style={styles.pullSummary}>
-                  <View style={styles.pullRow}>
-                    <Text style={styles.pullLabel}>Period covered</Text>
-                    <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.period}</Text>
+            {bankPlatforms.map((bank) => {
+              const isManuallyUploaded = uploadedDocuments.includes(bank);
+              return (
+                <Card key={bank} style={styles.bankCard}>
+                  <View style={styles.bankHeader}>
+                    <PlatformIcon label={bank} size={36} />
+                    <Text style={styles.bankName}>{bank}</Text>
+                    <Text style={styles.pulledLabel}>Automatically pulled</Text>
                   </View>
-                  <View style={styles.pullRow}>
-                    <Text style={styles.pullLabel}>Transactions found</Text>
-                    <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.transactions}</Text>
+                  <View style={styles.pullSummary}>
+                    <View style={styles.pullRow}>
+                      <Text style={styles.pullLabel}>Period covered</Text>
+                      <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.period}</Text>
+                    </View>
+                    <View style={styles.pullRow}>
+                      <Text style={styles.pullLabel}>Transactions found</Text>
+                      <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.transactions}</Text>
+                    </View>
+                    <View style={styles.pullRow}>
+                      <Text style={styles.pullLabel}>Total inflows</Text>
+                      <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.inflows}</Text>
+                    </View>
                   </View>
-                  <View style={styles.pullRow}>
-                    <Text style={styles.pullLabel}>Total inflows</Text>
-                    <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.inflows}</Text>
-                  </View>
-                </View>
-                <Button
-                  label="Upload manually"
-                  variant="secondary"
-                  onPress={() => handleUpload(bank)}
-                />
-              </Card>
-            ))}
+                  {/* Auto-pull is informational — it doesn't stand in the way
+                      of a manual upload the user wants to do anyway (e.g. as
+                      a fallback if auto-pull is wrong or incomplete). Once
+                      done, this switches to a plain confirmation + "Change"
+                      the same way deductions.tsx confirms a document. */}
+                  {isManuallyUploaded ? (
+                    <View style={styles.manualUploadConfirmRow}>
+                      <View style={styles.manualUploadConfirmLeft}>
+                        <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                        <Text style={styles.manualUploadConfirmText}>
+                          Document uploaded manually
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => handleRemoveManualUpload(bank)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.changeLink}>Change</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Button
+                      label="Upload manually"
+                      variant="secondary"
+                      onPress={() => handleUpload(bank)}
+                    />
+                  )}
+                </Card>
+              );
+            })}
           </View>
         ) : null}
 
@@ -173,6 +214,11 @@ export default function UploadDocumentsScreen() {
         visible={showEmailToast}
         message="We've sent an upload link to your email."
         onHide={() => setShowEmailToast(false)}
+      />
+      <Toast
+        visible={showUploadToast}
+        message="Document uploaded."
+        onHide={() => setShowUploadToast(false)}
       />
     </Screen>
   );
@@ -262,6 +308,26 @@ const styles = StyleSheet.create({
   pullValue: {
     ...typography.caption,
     color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  manualUploadConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  manualUploadConfirmLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  manualUploadConfirmText: {
+    ...typography.caption,
+    color: colors.success,
+    fontWeight: '600',
+  },
+  changeLink: {
+    ...typography.caption,
+    color: colors.primary,
     fontWeight: '600',
   },
   uploadCard: {

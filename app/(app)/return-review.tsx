@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -48,9 +49,7 @@ export default function ReturnReviewScreen() {
 
   return (
     <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={8}>
-        <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
-      </Pressable>
+      <BackButton />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -232,10 +231,6 @@ export default function ReturnReviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  backButton: {
-    marginTop: spacing.sm,
-    alignSelf: 'flex-start',
-  },
   scrollContent: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
