@@ -1,28 +1,28 @@
 /**
- * Forgot Password — from the 3 Figma frames the user provided (form,
- * success, error). These read as one flow transitioning through states
- * (same wordmark position, no back/header chrome suggesting separate
- * routes) rather than 3 distinct screens, so they're modeled as local
- * state within this one route instead of extra files.
+ * Forgot Password — from the Figma frames the user provided (form and
+ * "Check your email"), modeled as local state within this one route.
  *
- * Mock-only: there's no real email service or account lookup. To let both
- * the success and error paths be exercised, any email containing
- * "notfound" (case-insensitive) is treated as an unknown account —
- * anything else "succeeds". This is a test hook, not real validation.
+ * Real Supabase password reset with a 6-digit code (no email links — the
+ * app has no deep-link handling for auth):
+ *   1. here: resetPasswordForEmail() emails a code, if the account exists
+ *   2. OTP Verification (purpose=recovery): verifyOtp type 'recovery'
+ *   3. Reset Password: the new password is saved
+ *
+ * The confirmation is the same neutral message for every email, whether or
+ * not it has an account, so this screen can't be used to find out who's
+ * registered. That's why the Figma "We couldn't find an account with that
+ * email address" frame is no longer used.
  */
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { AuthScreen } from '../../components/layout/AuthScreen';
 import { TextField } from '../../components/ui/TextField';
-import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { typography } from '../../constants/theme';
+import { useAuth } from '../../state/authContext';
 
-type Step = 'form' | 'success' | 'error';
-
-const NOT_FOUND_TEST_FRAGMENT = 'notfound';
+type Step = 'form' | 'sent';
 
 /** Keeps the first 3 / last 2 characters of the local part visible —
  * matches the Figma frame's "oye*************90@gmail.com" pattern. */
@@ -41,12 +41,16 @@ function HelperNote({ text }: { text: string }) {
 }
 
 export default function ForgotPasswordScreen() {
+  const { requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
   const [step, setStep] = useState<Step>('form');
-  const [showResendToast, setShowResendToast] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) {
+      return;
+    }
     const trimmedEmail = email.trim();
     if (trimmedEmail.length === 0) {
       setEmailError('Enter your email address.');
@@ -54,59 +58,37 @@ export default function ForgotPasswordScreen() {
     }
     setEmailError(undefined);
 
-    // Mock lookup — see the file header for how to trigger each branch.
-    if (trimmedEmail.toLowerCase().includes(NOT_FOUND_TEST_FRAGMENT)) {
-      setStep('error');
-    } else {
-      setStep('success');
+    setIsSubmitting(true);
+    const result = await requestPasswordReset(trimmedEmail);
+    setIsSubmitting(false);
+    // Only a connection problem or a malformed address comes back as an
+    // error; everything else (including "no such account") looks like
+    // success on purpose.
+    if (result.error) {
+      setEmailError(result.error);
+      return;
     }
+    setStep('sent');
   };
 
-  if (step === 'success') {
-    return (
-      <>
-        <AuthScreen
-          headingAccent="Check your email"
-          subtitle={`We've sent a password reset link to ${maskEmail(email.trim())}`}
-          subtitleColor={colors.textPrimary}
-          ctaLabel="Done"
-          onSubmitCta={() => router.replace('/(auth)/sign-in')}
-          bottomLinkLabel="Resend link"
-          bottomLinkOnPress={() => setShowResendToast(true)}
-        >
-          <HelperNote text="If you don't see it within a few minutes, check your spam folder or request another link." />
-        </AuthScreen>
-
-        <Toast
-          visible={showResendToast}
-          message="We've resent the password reset link."
-          onHide={() => setShowResendToast(false)}
-        />
-      </>
-    );
-  }
-
-  if (step === 'error') {
+  if (step === 'sent') {
+    const trimmedEmail = email.trim();
     return (
       <AuthScreen
-        icon={<Ionicons name="alert-circle-outline" size={56} color={colors.warning} />}
-        headingAccent="We couldn't find an account with that email address."
-        headingAccentColor={colors.textPrimary}
-        subtitle="Check the email and try again, or create a new account if you're new to Fileo."
-        ctaLabel="Try again"
-        onSubmitCta={handleSubmit}
-        bottomLinkLabel="Create an account"
-        bottomLinkHref="/(auth)/create-account"
+        headingAccent="Check your email"
+        subtitle={`If an account exists for ${maskEmail(trimmedEmail)}, we've sent a 6-digit code to reset your password.`}
+        subtitleColor={colors.textPrimary}
+        ctaLabel="Enter code"
+        onSubmitCta={() =>
+          router.push({
+            pathname: '/(auth)/otp-verification',
+            params: { purpose: 'recovery', email: trimmedEmail },
+          })
+        }
+        bottomLinkLabel="Use a different email"
+        bottomLinkOnPress={() => setStep('form')}
       >
-        <TextField
-          label="Email address"
-          placeholder="you@example.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-          errorMessage={emailError}
-        />
+        <HelperNote text="If you don't see it within a few minutes, check your spam folder. You can request a new code on the next screen." />
       </AuthScreen>
     );
   }
@@ -114,10 +96,11 @@ export default function ForgotPasswordScreen() {
   return (
     <AuthScreen
       headingAccent="Forgot your password?"
-      subtitle="Enter the email address linked to your Fileo account. We'll send you a link to reset your password."
+      subtitle="Enter the email address linked to your Fileo account. We'll send you a code to reset your password."
       subtitleColor={colors.textPrimary}
-      ctaLabel="Send reset link"
+      ctaLabel="Send code"
       onSubmitCta={handleSubmit}
+      ctaLoading={isSubmitting}
       bottomText="Remember your password?"
       bottomLinkLabel="Back to sign in"
       bottomLinkHref="/(auth)/sign-in"
@@ -126,6 +109,7 @@ export default function ForgotPasswordScreen() {
         label="Email address"
         placeholder="you@example.com"
         autoCapitalize="none"
+        autoComplete="email"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}

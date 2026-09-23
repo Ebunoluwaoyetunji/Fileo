@@ -17,8 +17,10 @@
  *    anywhere, and the table's check constraints reject unmasked values).
  *    The "verification" behind it is still a format-only mock.
  *  - Active Sessions is mock data (no real session backend exists).
- *  - Preferences/2FA toggles and Change Password are local-only, no real
- *    settings or auth backend.
+ *  - Preferences/2FA toggles are local-only, no real settings backend.
+ *  - Change Password is real (AuthContext.changePassword): checks the
+ *    current password, saves the new one, and Supabase signs out every
+ *    other session while this one stays signed in.
  *  - Legal/Support items open shared placeholder content (info-page.tsx).
  */
 import { Ionicons } from '@expo/vector-icons';
@@ -119,7 +121,7 @@ function Row({
 }
 
 export default function ProfileScreen() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, changePassword } = useAuth();
   const isIdentityVerified = profile?.identity_verified === true;
   const { filingHistory } = useFiling();
   const isCompliant = filingHistory.length > 0;
@@ -135,7 +137,12 @@ export default function ProfileScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [currentPasswordError, setCurrentPasswordError] = useState<string | undefined>();
+  const [newPasswordError, setNewPasswordError] = useState<string | undefined>();
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | undefined>();
+  /** Errors that aren't about one field (e.g. no connection). */
+  const [passwordFormError, setPasswordFormError] = useState<string | undefined>();
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showPasswordToast, setShowPasswordToast] = useState(false);
 
   const [sessions, setSessions] = useState(INITIAL_SESSIONS);
@@ -151,16 +158,45 @@ export default function ProfileScreen() {
   const goToInfoPage = (topic: string, title: string) =>
     router.push({ pathname: '/(app)/info-page', params: { topic, title } });
 
-  const handleChangePassword = () => {
-    if (currentPassword.length === 0 || newPassword.length === 0) {
-      setPasswordError('Enter your current and new password.');
+  const handleChangePassword = async () => {
+    if (isChangingPassword) {
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setPasswordError('New passwords do not match.');
+    const nextCurrentError = currentPassword.length === 0 ? 'Enter your current password.' : undefined;
+    const nextNewError =
+      newPassword.length === 0
+        ? 'Enter a new password.'
+        : newPassword === currentPassword
+          ? 'Your new password must be different from your current one.'
+          : undefined;
+    const nextConfirmError =
+      confirmPassword.length === 0
+        ? 'Confirm your new password.'
+        : confirmPassword !== newPassword
+          ? 'New passwords do not match.'
+          : undefined;
+    setCurrentPasswordError(nextCurrentError);
+    setNewPasswordError(nextNewError);
+    setConfirmPasswordError(nextConfirmError);
+    setPasswordFormError(undefined);
+    if (nextCurrentError || nextNewError || nextConfirmError) {
       return;
     }
-    setPasswordError(undefined);
+
+    setIsChangingPassword(true);
+    const result = await changePassword(currentPassword, newPassword);
+    setIsChangingPassword(false);
+    if (result.error) {
+      if (result.code === 'current_password_invalid') {
+        setCurrentPasswordError(result.error);
+      } else if (result.code === 'same_password' || result.code === 'weak_password') {
+        setNewPasswordError(result.error);
+      } else {
+        setPasswordFormError(result.error);
+      }
+      return;
+    }
+
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -372,31 +408,42 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sheetTitle}>Change password</Text>
             <Text style={styles.sheetBody}>
-              Mock only — this doesn&apos;t change a real password anywhere.
+              You&apos;ll stay signed in here. Any other devices will be signed out.
             </Text>
             <TextField
               label="Current password"
               placeholder="Enter your current password"
               secureTextEntry
+              autoComplete="current-password"
               value={currentPassword}
               onChangeText={setCurrentPassword}
+              errorMessage={currentPasswordError}
             />
             <TextField
               label="New password"
               placeholder="Enter a new password"
               secureTextEntry
+              autoComplete="new-password"
               value={newPassword}
               onChangeText={setNewPassword}
+              errorMessage={newPasswordError}
             />
             <TextField
               label="Confirm new password"
               placeholder="Re-enter the new password"
               secureTextEntry
+              autoComplete="new-password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              errorMessage={passwordError}
+              errorMessage={confirmPasswordError}
             />
-            <Button label="Update password" variant="dark" onPress={handleChangePassword} />
+            {passwordFormError ? <Text style={styles.sheetError}>{passwordFormError}</Text> : null}
+            <Button
+              label="Update password"
+              variant="dark"
+              onPress={handleChangePassword}
+              loading={isChangingPassword}
+            />
           </View>
         ) : null}
 
@@ -473,7 +520,7 @@ export default function ProfileScreen() {
 
       <Toast
         visible={showPasswordToast}
-        message="Password updated (mock only — nothing real changed)."
+        message="Password updated. You've been signed out on other devices."
         onHide={() => setShowPasswordToast(false)}
       />
       <Toast
@@ -597,6 +644,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.lg,
+  },
+  sheetError: {
+    ...typography.caption,
+    color: colors.danger,
+    marginBottom: spacing.sm,
   },
   sheetButtonSpacing: {
     marginTop: spacing.sm,

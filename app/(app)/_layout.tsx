@@ -29,6 +29,7 @@ export default function AppLayout() {
         <Stack.Screen name="home" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="edit-profile" />
+        <Stack.Screen name="verify-email-change" />
         <Stack.Screen name="info-page" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="filing-history" />

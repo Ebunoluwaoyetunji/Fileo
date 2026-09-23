@@ -3,10 +3,11 @@
  * information" row. Saves full name and phone to the user's Supabase
  * profiles row.
  *
- * Email is shown read-only: the login email lives in Supabase Auth, and
- * changing it properly means Supabase's email-change flow (a confirmation
- * sent to the new address) — editing just the profiles copy would leave
- * the two out of sync. Not built yet.
+ * Email goes through Supabase's email-change flow instead: updateUser()
+ * emails confirmation codes, which are entered on the shared OTP screen
+ * (via (app)/verify-email-change). The login email only changes once
+ * they're confirmed, and a database trigger then copies it into
+ * profiles.email — the app can't write that column itself.
  *
  * ⚠️ PLACEHOLDER UI — no Figma frame for this screen either.
  */
@@ -23,11 +24,16 @@ import { spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
 export default function EditProfileScreen() {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, requestEmailChange } = useAuth();
+  // The login email (Supabase Auth) is the source of truth; profiles.email
+  // is kept in sync with it by a database trigger.
+  const currentEmail = user?.email ?? profile?.email ?? '';
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
+  const [email, setEmail] = useState(currentEmail);
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [fullNameError, setFullNameError] = useState<string | undefined>();
+  const [emailError, setEmailError] = useState<string | undefined>();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -37,19 +43,48 @@ export default function EditProfileScreen() {
       return;
     }
     const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
     const nextFullNameError = trimmedName.length === 0 ? 'Enter your full name.' : undefined;
+    const nextEmailError =
+      trimmedEmail.length === 0
+        ? 'Enter your email address.'
+        : !/^\S+@\S+\.\S+$/.test(trimmedEmail)
+          ? 'Enter a valid email address.'
+          : undefined;
     setFullNameError(nextFullNameError);
-    if (nextFullNameError) {
+    setEmailError(nextEmailError);
+    if (nextFullNameError || nextEmailError) {
       return;
     }
+    const isEmailChanged = trimmedEmail.toLowerCase() !== currentEmail.toLowerCase();
 
     setIsSaving(true);
     const result = await updateProfile({ full_name: trimmedName, phone: phone.trim() || null });
-    setIsSaving(false);
     if (result.error) {
+      setIsSaving(false);
       setSaveError(result.error);
       return;
     }
+
+    if (isEmailChanged) {
+      const emailResult = await requestEmailChange(trimmedEmail);
+      setIsSaving(false);
+      if (emailResult.error) {
+        if (emailResult.code === 'email_exists' || emailResult.code === 'email_address_invalid') {
+          setEmailError(emailResult.error);
+        } else {
+          setSaveError(emailResult.error);
+        }
+        return;
+      }
+      router.push({
+        pathname: '/(app)/verify-email-change',
+        params: { purpose: 'email_change', newEmail: trimmedEmail, currentEmail },
+      });
+      return;
+    }
+
+    setIsSaving(false);
     setShowToast(true);
   };
 
@@ -62,7 +97,9 @@ export default function EditProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Personal information</Text>
-        <Text style={styles.subtitle}>Email can&apos;t be changed here yet.</Text>
+        <Text style={styles.subtitle}>
+          If you change your email, we&apos;ll send a code to confirm it.
+        </Text>
 
         <TextField
           label="Full name"
@@ -73,9 +110,13 @@ export default function EditProfileScreen() {
         />
         <TextField
           label="Email address"
-          value={profile?.email ?? user?.email ?? ''}
-          editable={false}
-          style={styles.readOnlyInput}
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          errorMessage={emailError}
         />
         <TextField
           label="Phone number"
@@ -94,7 +135,11 @@ export default function EditProfileScreen() {
         />
       </ScrollView>
 
+      {/* Keyed by message: a second error arriving while the first is still
+          showing gets its own full timer, instead of being cleared early by
+          the first toast's hide. */}
       <Toast
+        key={saveError ?? 'none'}
         visible={saveError !== null}
         message={saveError ?? ''}
         onHide={() => setSaveError(null)}
@@ -140,9 +185,5 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: spacing.sm,
-  },
-  readOnlyInput: {
-    color: colors.textSecondary,
-    backgroundColor: colors.surface,
   },
 });

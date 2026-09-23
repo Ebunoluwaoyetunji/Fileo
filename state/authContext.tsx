@@ -86,6 +86,30 @@ type AuthContextValue = {
    * verified their identity) and returns it, or null if it couldn't be
    * loaded. */
   refreshProfile: () => Promise<Profile | null>;
+
+  /** Forgot Password step 1: emails a 6-digit recovery code if an account
+   * exists. Deliberately reports success for unknown emails too (see the
+   * implementation) so the screen can't reveal who has an account. */
+  requestPasswordReset: (email: string) => Promise<AuthResult>;
+  /** Forgot Password step 2: checks the code; on success the user is
+   * signed in (in a "recovery" session) so they can set a new password. */
+  verifyPasswordResetCode: (email: string, code: string) => Promise<AuthResult>;
+  /** Forgot Password step 3: saves the new password. Supabase signs out
+   * every other session when a password changes. */
+  setNewPassword: (password: string) => Promise<AuthResult>;
+  /** Profile > Change password: checks the current password, then saves the
+   * new one. Other sessions are signed out; this device stays signed in. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<AuthResult>;
+  /** Profile > email: asks Supabase to email confirmation codes (to the new
+   * address, and to the current one too when "Secure email change" is on). */
+  requestEmailChange: (newEmail: string) => Promise<AuthResult>;
+  /** Confirms one email-change code. `complete` is true once the change has
+   * gone through; false means this code was accepted but the code from the
+   * other inbox is still needed ("Secure email change"). */
+  verifyEmailChangeCode: (email: string, code: string) => Promise<AuthResult & { complete?: boolean }>;
+  /** Sends fresh email-change codes (both inboxes). Earlier codes stop
+   * working, so both have to be entered again. */
+  resendEmailChangeCodes: () => Promise<AuthResult>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -102,7 +126,18 @@ const FRIENDLY_AUTH_MESSAGES: Record<string, string> = {
   user_already_exists: 'An account with this email already exists. Log in instead.',
   email_exists: 'An account with this email already exists. Log in instead.',
   otp_expired: 'That code is incorrect or has expired.',
+  same_password: 'Your new password must be different from your current one.',
+  // Supabase's actual code for a wrong current_password (the server-side
+  // check); the app's own sign-in check reports the same code.
+  current_password_invalid: 'Your current password is incorrect.',
+  email_address_invalid: 'Enter a valid email address.',
+  // Only if "Secure password change" is turned on in Supabase and the
+  // session is over 24 hours old; changePassword() signs in fresh first, so
+  // this shouldn't normally be reachable.
+  reauthentication_needed: 'For your security, sign out and sign back in, then try again.',
 };
+
+const SESSION_EXPIRED_MESSAGE = 'Your session has expired. Please start again.';
 
 function toAuthResult(error: { message: string; code?: string; name?: string; status?: number }): AuthResult {
   // supabase-js reports a failed fetch (offline, DNS, blocked) as a
@@ -282,6 +317,124 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile: (updates) => writeProfile(updates),
 
       refreshProfile,
+
+      requestPasswordReset: async (email) => {
+        // Sends the "Reset password" email template, which must contain
+        // {{ .Token }} for a code (the default sends a link).
+        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        if (!error) {
+          return { error: null };
+        }
+        const result = toAuthResult(error);
+        // Supabase already returns success for unknown emails. But its
+        // per-address "wait 60 seconds" limit only applies to addresses that
+        // DO have an account, so showing that error would reveal the email
+        // is registered. Only a connection problem or a malformed address
+        // (both of which say nothing about the account) are shown.
+        if (result.code === 'network') {
+          return result;
+        }
+        if (result.code === 'email_address_invalid' || result.code === 'validation_failed') {
+          return { error: FRIENDLY_AUTH_MESSAGES.email_address_invalid, code: 'email_address_invalid' };
+        }
+        return { error: null };
+      },
+
+      verifyPasswordResetCode: async (email, code) => {
+        const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'recovery' });
+        if (error) {
+          return toAuthResult(error);
+        }
+        setSession(data.session);
+        return { error: null };
+      },
+
+      setNewPassword: async (password) => {
+        // Supabase treats a session that came from a recovery code as a
+        // recovery session, so no current password is needed here even with
+        // "Require current password when updating" on.
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) {
+          if (error.name === 'AuthSessionMissingError') {
+            return { error: SESSION_EXPIRED_MESSAGE, code: 'session_missing' };
+          }
+          return toAuthResult(error);
+        }
+        return { error: null };
+      },
+
+      changePassword: async (currentPassword, newPassword) => {
+        const email = session?.user.email;
+        if (!email) {
+          return { error: SESSION_EXPIRED_MESSAGE, code: 'session_missing' };
+        }
+
+        // 1. Check the current password by signing in with it. A wrong
+        //    password leaves the existing session untouched. This check runs
+        //    in every case — Supabase's own server-side check (step 2) is
+        //    skipped for sessions that came from an email code, such as
+        //    right after sign-up.
+        const check = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+        if (check.error) {
+          if (check.error.code === 'invalid_credentials') {
+            return { error: FRIENDLY_AUTH_MESSAGES.current_password_invalid, code: 'current_password_invalid' };
+          }
+          return toAuthResult(check.error);
+        }
+        setSession(check.data.session);
+
+        // 2. Save it, passing current_password so Supabase re-checks it on
+        //    the server too ("Require current password when updating"). The
+        //    server then signs out every other session, keeping this one.
+        const { error } = await supabase.auth.updateUser({
+          password: newPassword,
+          current_password: currentPassword,
+        });
+        return error ? toAuthResult(error) : { error: null };
+      },
+
+      requestEmailChange: async (newEmail) => {
+        // Sends the "Change email address" template (must contain
+        // {{ .Token }}): to the new address, and with "Secure email change"
+        // on, to the current address too, each with its own code.
+        const { error } = await supabase.auth.updateUser({ email: newEmail });
+        if (!error) {
+          return { error: null };
+        }
+        if (error.code === 'email_exists') {
+          return { error: 'This email is already used by another account.', code: 'email_exists' };
+        }
+        if (error.code === 'validation_failed') {
+          return { error: FRIENDLY_AUTH_MESSAGES.email_address_invalid, code: 'email_address_invalid' };
+        }
+        return toAuthResult(error);
+      },
+
+      verifyEmailChangeCode: async (email, code) => {
+        // `email` must be the address the code was sent to: Supabase checks
+        // each code against its own inbox's address.
+        const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'email_change' });
+        if (error) {
+          return toAuthResult(error);
+        }
+        if (!data.session) {
+          // First of the two codes accepted; the other inbox's is still needed.
+          return { error: null, complete: false };
+        }
+        setSession(data.session);
+        return { error: null, complete: true };
+      },
+
+      resendEmailChangeCodes: async () => {
+        // Supabase looks the user up by their CURRENT email here, not the
+        // new one (with the new one it silently sends nothing).
+        const currentEmail = session?.user.email;
+        if (!currentEmail) {
+          return { error: SESSION_EXPIRED_MESSAGE, code: 'session_missing' };
+        }
+        const { error } = await supabase.auth.resend({ type: 'email_change', email: currentEmail });
+        return error ? toAuthResult(error) : { error: null };
+      },
     }),
     [session, profile, isLoading, hasCompletedOnboarding, writeProfile, refreshProfile]
   );

@@ -2,16 +2,26 @@
  * OTP Verification — from the Figma frame: 6 individual code boxes, a
  * masked destination, "Resend code", and a "Verify" CTA.
  *
- * Real Supabase email OTP: signUp() (Create Account) makes Supabase email a
- * 6-digit code — the project's "Confirm signup" template sends {{ .Token }}
- * rather than a confirmation link — and this screen confirms it with
- * verifyOtp(), which also signs the user in. Success hands off to
- * app/index.tsx, which sends a new account on to Identity Verification.
+ * One screen for every emailed 6-digit code, chosen by the `purpose` param:
+ *
+ *  - signup (default): the "Confirm signup" code from Create Account.
+ *    verifyOtp type 'email' signs the user in; app/index.tsx then sends a
+ *    new account on to Identity Verification.
+ *  - recovery: the "Reset password" code from Forgot Password. verifyOtp
+ *    type 'recovery' signs the user in so Reset Password can save the new
+ *    password. Wording stays neutral ("if an account exists") because no
+ *    email is sent for unknown addresses.
+ *  - email_change: the "Change email address" codes from Edit Profile
+ *    (reached via the (app)/verify-email-change route, which renders this
+ *    same screen). With Supabase's "Secure email change" on, BOTH inboxes
+ *    get their own code, and each is checked against its own address: the
+ *    new email's code first, then the current email's. With it off, the
+ *    new email's code alone completes the change and the second step is
+ *    skipped automatically.
  *
  * ⚠️ Copy change from the Figma frame: it said the code was sent "via SMS
- * to the number 08******33". The code now really goes to the user's email,
- * so the subtitle says that instead (SMS would need a Supabase phone
- * provider like Twilio, which isn't set up).
+ * to the number 08******33". Codes really go to the user's email, so the
+ * subtitle says that instead.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -21,12 +31,14 @@ import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { useAuth } from '../../state/authContext';
 
+type Purpose = 'signup' | 'recovery' | 'email_change';
+type EmailChangeStep = 'new' | 'current';
+
 const CODE_LENGTH = 6;
 // Matches Supabase's default minimum interval between emails to the same
 // address (60s) — a shorter cooldown here would just let the user tap
 // Resend into a rate-limit error. Starts running on arrival, since a code
-// was sent moments ago by Create Account (or by Sign In, for an account
-// that was never verified).
+// was sent moments ago by the previous screen.
 const RESEND_COOLDOWN_SECONDS = 60;
 
 /** "sharon.oyelaran@gmail.com" -> "sh************@gmail.com": enough to
@@ -40,14 +52,31 @@ function maskEmail(email: string) {
 }
 
 export default function OtpVerificationScreen() {
-  const { verifySignUpCode, resendSignUpCode } = useAuth();
-  const { email } = useLocalSearchParams<{ email?: string }>();
+  const {
+    verifySignUpCode,
+    resendSignUpCode,
+    verifyPasswordResetCode,
+    requestPasswordReset,
+    verifyEmailChangeCode,
+    resendEmailChangeCodes,
+    refreshProfile,
+  } = useAuth();
+  const params = useLocalSearchParams<{
+    purpose?: Purpose;
+    email?: string;
+    newEmail?: string;
+    currentEmail?: string;
+  }>();
+  const purpose: Purpose = params.purpose ?? 'signup';
+  const { email, newEmail, currentEmail } = params;
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+  const [emailChangeStep, setEmailChangeStep] = useState<EmailChangeStep>('new');
+  const [isEmailChangeComplete, setIsEmailChangeComplete] = useState(false);
 
   // Ticks the cooldown down once a second while it's running; the effect
   // itself just schedules one tick and cleans up, so it naturally stops
@@ -60,12 +89,32 @@ export default function OtpVerificationScreen() {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  /** The address the code being entered right now was sent to. */
+  const targetEmail =
+    purpose === 'email_change' ? (emailChangeStep === 'new' ? newEmail : currentEmail) : email;
+
+  let subtitle: string;
+  if (purpose === 'recovery') {
+    subtitle = email
+      ? `If an account exists for ${maskEmail(email)}, we've sent it a 6-digit code.`
+      : "If an account exists for that email, we've sent it a 6-digit code.";
+  } else if (purpose === 'email_change') {
+    subtitle =
+      emailChangeStep === 'new'
+        ? `Enter the 6-digit code we sent to your new email ${maskEmail(newEmail ?? '')}`
+        : `Now enter the 6-digit code we sent to your current email ${maskEmail(currentEmail ?? '')}`;
+  } else {
+    subtitle = email
+      ? `We sent a 6-digit code to your email ${maskEmail(email)}`
+      : 'We sent a 6-digit code to your email';
+  }
+
   const handleVerify = async () => {
-    if (isVerifying) {
+    if (isVerifying || isEmailChangeComplete) {
       return;
     }
-    if (!email) {
-      setError('Something went wrong. Go back and create your account again.');
+    if (!targetEmail) {
+      setError('Something went wrong. Please go back and try again.');
       return;
     }
     if (code.length < CODE_LENGTH) {
@@ -74,7 +123,43 @@ export default function OtpVerificationScreen() {
     }
     setError(undefined);
     setIsVerifying(true);
-    const result = await verifySignUpCode(email, code);
+
+    if (purpose === 'recovery') {
+      const result = await verifyPasswordResetCode(targetEmail, code);
+      setIsVerifying(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.replace('/(auth)/reset-password');
+      return;
+    }
+
+    if (purpose === 'email_change') {
+      const result = await verifyEmailChangeCode(targetEmail, code);
+      if (result.error) {
+        setIsVerifying(false);
+        setError(result.error);
+        return;
+      }
+      if (!result.complete) {
+        // "Secure email change": the new inbox's code is in; now the
+        // current inbox's.
+        setIsVerifying(false);
+        setCode('');
+        setEmailChangeStep('current');
+        return;
+      }
+      // Changed. The database trigger has already copied the new address
+      // into profiles; reload it so every screen shows it.
+      await refreshProfile();
+      setIsVerifying(false);
+      setIsEmailChangeComplete(true);
+      setToastMessage('Your email address has been updated.');
+      return;
+    }
+
+    const result = await verifySignUpCode(targetEmail, code);
     setIsVerifying(false);
     if (result.error) {
       setError(result.error);
@@ -84,12 +169,36 @@ export default function OtpVerificationScreen() {
   };
 
   const handleResend = async () => {
-    if (resendCooldown > 0 || !email) {
+    if (resendCooldown > 0 || isEmailChangeComplete) {
       return;
     }
     setCode('');
     setError(undefined);
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
+
+    if (purpose === 'recovery') {
+      if (!email) {
+        return;
+      }
+      const result = await requestPasswordReset(email);
+      setToastMessage(result.error ?? "If an account exists for this email, we've sent a new code.");
+      return;
+    }
+
+    if (purpose === 'email_change') {
+      const result = await resendEmailChangeCodes();
+      if (!result.error) {
+        // Fresh codes replace both old ones, so start again from the new
+        // inbox's code.
+        setEmailChangeStep('new');
+      }
+      setToastMessage(result.error ?? "We've sent new codes. Enter the one sent to your new email first.");
+      return;
+    }
+
+    if (!email) {
+      return;
+    }
     const result = await resendSignUpCode(email);
     setToastMessage(result.error ?? 'A new verification code has been sent to your email.');
   };
@@ -99,18 +208,14 @@ export default function OtpVerificationScreen() {
       <AuthScreen
         headingAccent="Verification Code"
         headingAccentColor={colors.textPrimary}
-        subtitle={
-          email
-            ? `We sent a 6-digit code to your email ${maskEmail(email)}`
-            : 'We sent a 6-digit code to your email'
-        }
+        subtitle={subtitle}
         subtitleColor={colors.textPrimary}
         ctaLabel="Verify"
         onSubmitCta={handleVerify}
         ctaLoading={isVerifying}
         bottomLinkLabel={resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
         bottomLinkOnPress={handleResend}
-        bottomLinkDisabled={resendCooldown > 0}
+        bottomLinkDisabled={resendCooldown > 0 || isEmailChangeComplete}
       >
         <OtpInput length={CODE_LENGTH} value={code} onChangeValue={setCode} errorMessage={error} />
       </AuthScreen>
@@ -118,7 +223,12 @@ export default function OtpVerificationScreen() {
       <Toast
         visible={toastMessage !== null}
         message={toastMessage ?? ''}
-        onHide={() => setToastMessage(null)}
+        onHide={() => {
+          setToastMessage(null);
+          if (isEmailChangeComplete) {
+            router.dismissTo('/(app)/profile');
+          }
+        }}
       />
     </>
   );
