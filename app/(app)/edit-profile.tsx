@@ -3,11 +3,12 @@
  * information" row. Saves full name and phone to the user's Supabase
  * profiles row.
  *
- * Email goes through Supabase's email-change flow instead: updateUser()
- * emails confirmation codes, which are entered on the shared OTP screen
- * (via (app)/verify-email-change). The login email only changes once
- * they're confirmed, and a database trigger then copies it into
- * profiles.email — the app can't write that column itself.
+ * Email goes through Supabase's email-change flow instead. Changing it asks
+ * for the current password (checked the same way as Change Password); only
+ * when that's right does updateUser() email a code to the new address,
+ * entered on the shared OTP screen (via (app)/verify-email-change). The
+ * login email changes once the code is confirmed, and a database trigger
+ * then copies it into profiles.email — the app can't write that column.
  *
  * ⚠️ PLACEHOLDER UI — no Figma frame for this screen either.
  */
@@ -32,18 +33,23 @@ export default function EditProfileScreen() {
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
   const [email, setEmail] = useState(currentEmail);
   const [phone, setPhone] = useState(profile?.phone ?? '');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [fullNameError, setFullNameError] = useState<string | undefined>();
   const [emailError, setEmailError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showToast, setShowToast] = useState(false);
+
+  const trimmedEmail = email.trim();
+  const isEmailChanged = trimmedEmail.toLowerCase() !== currentEmail.toLowerCase();
 
   const handleSave = async () => {
     if (isSaving) {
       return;
     }
     const trimmedName = fullName.trim();
-    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
     const nextFullNameError = trimmedName.length === 0 ? 'Enter your full name.' : undefined;
     const nextEmailError =
       trimmedEmail.length === 0
@@ -51,40 +57,56 @@ export default function EditProfileScreen() {
         : !/^\S+@\S+\.\S+$/.test(trimmedEmail)
           ? 'Enter a valid email address.'
           : undefined;
+    const nextPasswordError =
+      isEmailChanged && currentPassword.length === 0
+        ? 'Enter your current password to change your email.'
+        : undefined;
     setFullNameError(nextFullNameError);
     setEmailError(nextEmailError);
-    if (nextFullNameError || nextEmailError) {
+    setPasswordError(nextPasswordError);
+    if (nextFullNameError || nextEmailError || nextPasswordError) {
       return;
     }
-    const isEmailChanged = trimmedEmail.toLowerCase() !== currentEmail.toLowerCase();
 
     setIsSaving(true);
-    const result = await updateProfile({ full_name: trimmedName, phone: phone.trim() || null });
-    if (result.error) {
-      setIsSaving(false);
-      setSaveError(result.error);
-      return;
-    }
 
+    // Email first: nothing is saved and no code is sent if the password is
+    // wrong or the new address can't be used.
     if (isEmailChanged) {
-      const emailResult = await requestEmailChange(trimmedEmail);
-      setIsSaving(false);
+      const emailResult = await requestEmailChange(trimmedEmail, currentPassword);
       if (emailResult.error) {
-        if (emailResult.code === 'email_exists' || emailResult.code === 'email_address_invalid') {
+        setIsSaving(false);
+        if (emailResult.code === 'current_password_invalid') {
+          setPasswordError(emailResult.error);
+        } else if (emailResult.code === 'email_exists' || emailResult.code === 'email_address_invalid') {
           setEmailError(emailResult.error);
         } else {
           setSaveError(emailResult.error);
         }
         return;
       }
-      router.push({
-        pathname: '/(app)/verify-email-change',
-        params: { purpose: 'email_change', newEmail: trimmedEmail, currentEmail },
-      });
-      return;
+    }
+
+    const isNameOrPhoneChanged =
+      trimmedName !== (profile?.full_name ?? '') || trimmedPhone !== (profile?.phone ?? '');
+    if (isNameOrPhoneChanged) {
+      const result = await updateProfile({ full_name: trimmedName, phone: trimmedPhone || null });
+      if (result.error) {
+        setIsSaving(false);
+        setSaveError(result.error);
+        return;
+      }
     }
 
     setIsSaving(false);
+    if (isEmailChanged) {
+      setCurrentPassword('');
+      router.push({
+        pathname: '/(app)/verify-email-change',
+        params: { purpose: 'email_change', newEmail: trimmedEmail },
+      });
+      return;
+    }
     setShowToast(true);
   };
 
@@ -98,7 +120,8 @@ export default function EditProfileScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Personal information</Text>
         <Text style={styles.subtitle}>
-          If you change your email, we&apos;ll send a code to confirm it.
+          To change your email, you&apos;ll need your current password and a code we send to the
+          new address.
         </Text>
 
         <TextField
@@ -118,6 +141,17 @@ export default function EditProfileScreen() {
           onChangeText={setEmail}
           errorMessage={emailError}
         />
+        {isEmailChanged ? (
+          <TextField
+            label="Current password"
+            placeholder="Enter your current password"
+            secureTextEntry
+            autoComplete="current-password"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            errorMessage={passwordError}
+          />
+        ) : null}
         <TextField
           label="Phone number"
           placeholder="+234 800 000 0000"

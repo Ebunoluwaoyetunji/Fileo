@@ -100,16 +100,14 @@ type AuthContextValue = {
   /** Profile > Change password: checks the current password, then saves the
    * new one. Other sessions are signed out; this device stays signed in. */
   changePassword: (currentPassword: string, newPassword: string) => Promise<AuthResult>;
-  /** Profile > email: asks Supabase to email confirmation codes (to the new
-   * address, and to the current one too when "Secure email change" is on). */
-  requestEmailChange: (newEmail: string) => Promise<AuthResult>;
-  /** Confirms one email-change code. `complete` is true once the change has
-   * gone through; false means this code was accepted but the code from the
-   * other inbox is still needed ("Secure email change"). */
-  verifyEmailChangeCode: (email: string, code: string) => Promise<AuthResult & { complete?: boolean }>;
-  /** Sends fresh email-change codes (both inboxes). Earlier codes stop
-   * working, so both have to be entered again. */
-  resendEmailChangeCodes: () => Promise<AuthResult>;
+  /** Edit Profile > email: checks the current password (same check as
+   * changePassword), and only if it's right asks Supabase to email a code
+   * to the new address. */
+  requestEmailChange: (newEmail: string, currentPassword: string) => Promise<AuthResult>;
+  /** Confirms the code sent to the new address; the email changes at once. */
+  verifyEmailChangeCode: (newEmail: string, code: string) => Promise<AuthResult>;
+  /** Sends a fresh code to the new address; the previous one stops working. */
+  resendEmailChangeCode: () => Promise<AuthResult>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -241,6 +239,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return nextProfile;
   }, [userId]);
 
+  // Shared by Change Password and email change. Confirms the current
+  // password by signing in with it; a wrong password leaves the existing
+  // session untouched. Done in the app rather than relying only on
+  // Supabase's server-side check, because Supabase skips that check for
+  // sessions that came from an email code (e.g. right after sign-up).
+  const checkCurrentPassword = useCallback(
+    async (currentPassword: string): Promise<AuthResult> => {
+      const email = session?.user.email;
+      if (!email) {
+        return { error: SESSION_EXPIRED_MESSAGE, code: 'session_missing' };
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+      if (error) {
+        if (error.code === 'invalid_credentials') {
+          return { error: FRIENDLY_AUTH_MESSAGES.current_password_invalid, code: 'current_password_invalid' };
+        }
+        return toAuthResult(error);
+      }
+      setSession(data.session);
+      return { error: null };
+    },
+    [session]
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -364,24 +386,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
 
       changePassword: async (currentPassword, newPassword) => {
-        const email = session?.user.email;
-        if (!email) {
-          return { error: SESSION_EXPIRED_MESSAGE, code: 'session_missing' };
-        }
-
-        // 1. Check the current password by signing in with it. A wrong
-        //    password leaves the existing session untouched. This check runs
-        //    in every case — Supabase's own server-side check (step 2) is
-        //    skipped for sessions that came from an email code, such as
-        //    right after sign-up.
-        const check = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+        // 1. Check the current password (see checkCurrentPassword).
+        const check = await checkCurrentPassword(currentPassword);
         if (check.error) {
-          if (check.error.code === 'invalid_credentials') {
-            return { error: FRIENDLY_AUTH_MESSAGES.current_password_invalid, code: 'current_password_invalid' };
-          }
-          return toAuthResult(check.error);
+          return check;
         }
-        setSession(check.data.session);
 
         // 2. Save it, passing current_password so Supabase re-checks it on
         //    the server too ("Require current password when updating"). The
@@ -393,10 +402,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return error ? toAuthResult(error) : { error: null };
       },
 
-      requestEmailChange: async (newEmail) => {
+      requestEmailChange: async (newEmail, currentPassword) => {
+        // No code is sent unless the current password is right.
+        const check = await checkCurrentPassword(currentPassword);
+        if (check.error) {
+          return check;
+        }
         // Sends the "Change email address" template (must contain
-        // {{ .Token }}): to the new address, and with "Secure email change"
-        // on, to the current address too, each with its own code.
+        // {{ .Token }}) to the new address only — "Secure email change" is
+        // OFF in the Supabase project, so there's no code for the old one.
         const { error } = await supabase.auth.updateUser({ email: newEmail });
         if (!error) {
           return { error: null };
@@ -410,22 +424,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return toAuthResult(error);
       },
 
-      verifyEmailChangeCode: async (email, code) => {
-        // `email` must be the address the code was sent to: Supabase checks
-        // each code against its own inbox's address.
-        const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'email_change' });
+      verifyEmailChangeCode: async (newEmail, code) => {
+        // Supabase checks the code against the address it was sent to.
+        const { data, error } = await supabase.auth.verifyOtp({ email: newEmail, token: code, type: 'email_change' });
         if (error) {
           return toAuthResult(error);
         }
         if (!data.session) {
-          // First of the two codes accepted; the other inbox's is still needed.
-          return { error: null, complete: false };
+          // Only happens if "Secure email change" is turned back on in
+          // Supabase (a second code, sent to the old address, would then be
+          // needed — this app doesn't ask for it).
+          return { error: "We couldn't confirm your new email. Please try again.", code: 'email_change_incomplete' };
         }
         setSession(data.session);
-        return { error: null, complete: true };
+        return { error: null };
       },
 
-      resendEmailChangeCodes: async () => {
+      resendEmailChangeCode: async () => {
         // Supabase looks the user up by their CURRENT email here, not the
         // new one (with the new one it silently sends nothing).
         const currentEmail = session?.user.email;
@@ -436,7 +451,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return error ? toAuthResult(error) : { error: null };
       },
     }),
-    [session, profile, isLoading, hasCompletedOnboarding, writeProfile, refreshProfile]
+    [session, profile, isLoading, hasCompletedOnboarding, writeProfile, refreshProfile, checkCurrentPassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

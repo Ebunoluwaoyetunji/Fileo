@@ -11,13 +11,10 @@
  *    type 'recovery' signs the user in so Reset Password can save the new
  *    password. Wording stays neutral ("if an account exists") because no
  *    email is sent for unknown addresses.
- *  - email_change: the "Change email address" codes from Edit Profile
+ *  - email_change: the "Change email address" code from Edit Profile
  *    (reached via the (app)/verify-email-change route, which renders this
- *    same screen). With Supabase's "Secure email change" on, BOTH inboxes
- *    get their own code, and each is checked against its own address: the
- *    new email's code first, then the current email's. With it off, the
- *    new email's code alone completes the change and the second step is
- *    skipped automatically.
+ *    same screen). "Secure email change" is OFF in the Supabase project, so
+ *    there's one code, sent to the new address, and it completes the change.
  *
  * ⚠️ Copy change from the Figma frame: it said the code was sent "via SMS
  * to the number 08******33". Codes really go to the user's email, so the
@@ -32,7 +29,6 @@ import { colors } from '../../constants/colors';
 import { useAuth } from '../../state/authContext';
 
 type Purpose = 'signup' | 'recovery' | 'email_change';
-type EmailChangeStep = 'new' | 'current';
 
 const CODE_LENGTH = 6;
 // Matches Supabase's default minimum interval between emails to the same
@@ -58,24 +54,18 @@ export default function OtpVerificationScreen() {
     verifyPasswordResetCode,
     requestPasswordReset,
     verifyEmailChangeCode,
-    resendEmailChangeCodes,
+    resendEmailChangeCode,
     refreshProfile,
   } = useAuth();
-  const params = useLocalSearchParams<{
-    purpose?: Purpose;
-    email?: string;
-    newEmail?: string;
-    currentEmail?: string;
-  }>();
+  const params = useLocalSearchParams<{ purpose?: Purpose; email?: string; newEmail?: string }>();
   const purpose: Purpose = params.purpose ?? 'signup';
-  const { email, newEmail, currentEmail } = params;
+  const { email, newEmail } = params;
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN_SECONDS);
-  const [emailChangeStep, setEmailChangeStep] = useState<EmailChangeStep>('new');
   const [isEmailChangeComplete, setIsEmailChangeComplete] = useState(false);
 
   // Ticks the cooldown down once a second while it's running; the effect
@@ -89,9 +79,8 @@ export default function OtpVerificationScreen() {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  /** The address the code being entered right now was sent to. */
-  const targetEmail =
-    purpose === 'email_change' ? (emailChangeStep === 'new' ? newEmail : currentEmail) : email;
+  /** The address the code was sent to. */
+  const targetEmail = purpose === 'email_change' ? newEmail : email;
 
   let subtitle: string;
   if (purpose === 'recovery') {
@@ -99,10 +88,7 @@ export default function OtpVerificationScreen() {
       ? `If an account exists for ${maskEmail(email)}, we've sent it a 6-digit code.`
       : "If an account exists for that email, we've sent it a 6-digit code.";
   } else if (purpose === 'email_change') {
-    subtitle =
-      emailChangeStep === 'new'
-        ? `Enter the 6-digit code we sent to your new email ${maskEmail(newEmail ?? '')}`
-        : `Now enter the 6-digit code we sent to your current email ${maskEmail(currentEmail ?? '')}`;
+    subtitle = `Enter the 6-digit code we sent to your new email ${maskEmail(newEmail ?? '')}`;
   } else {
     subtitle = email
       ? `We sent a 6-digit code to your email ${maskEmail(email)}`
@@ -142,14 +128,6 @@ export default function OtpVerificationScreen() {
         setError(result.error);
         return;
       }
-      if (!result.complete) {
-        // "Secure email change": the new inbox's code is in; now the
-        // current inbox's.
-        setIsVerifying(false);
-        setCode('');
-        setEmailChangeStep('current');
-        return;
-      }
       // Changed. The database trigger has already copied the new address
       // into profiles; reload it so every screen shows it.
       await refreshProfile();
@@ -186,13 +164,8 @@ export default function OtpVerificationScreen() {
     }
 
     if (purpose === 'email_change') {
-      const result = await resendEmailChangeCodes();
-      if (!result.error) {
-        // Fresh codes replace both old ones, so start again from the new
-        // inbox's code.
-        setEmailChangeStep('new');
-      }
-      setToastMessage(result.error ?? "We've sent new codes. Enter the one sent to your new email first.");
+      const result = await resendEmailChangeCode();
+      setToastMessage(result.error ?? "We've sent a new code to your new email.");
       return;
     }
 
