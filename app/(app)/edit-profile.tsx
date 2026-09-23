@@ -3,9 +3,11 @@
  * information" row. Saves full name and phone to the user's Supabase
  * profiles row.
  *
- * Email goes through Supabase's email-change flow instead. Changing it asks
- * for the current password (checked the same way as Change Password); only
- * when that's right does updateUser() email a code to the new address,
+ * Email goes through Supabase's email-change flow instead. Changing it first
+ * confirms it's the user: fingerprint / Face ID when the device has it set
+ * up (lib/biometrics — never the device PIN), otherwise the current Fileo
+ * password (checked the same way as Change Password). Only then does
+ * updateUser() email a code to the new address,
  * entered on the shared OTP screen (via (app)/verify-email-change). The
  * login email changes once the code is confirmed, and a database trigger
  * then copies it into profiles.email — the app can't write that column.
@@ -14,7 +16,7 @@
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
@@ -22,6 +24,7 @@ import { TextField } from '../../components/ui/TextField';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
+import { canUseBiometrics, confirmWithBiometrics } from '../../lib/biometrics';
 import { useAuth } from '../../state/authContext';
 
 export default function EditProfileScreen() {
@@ -40,9 +43,28 @@ export default function EditProfileScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  // null while checking. Without biometrics, the password field shows as
+  // soon as the email is edited; with them, only if the user picks "Use
+  // password instead" or the fingerprint / face check fails too many times.
+  const [hasBiometrics, setHasBiometrics] = useState<boolean | null>(null);
+  const [usePassword, setUsePassword] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    canUseBiometrics().then((available) => {
+      if (isMounted) {
+        setHasBiometrics(available);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const trimmedEmail = email.trim();
   const isEmailChanged = trimmedEmail.toLowerCase() !== currentEmail.toLowerCase();
+  const showPasswordField = isEmailChanged && (hasBiometrics === false || usePassword);
+  const showUsePasswordLink = isEmailChanged && hasBiometrics === true && !usePassword;
 
   const handleSave = async () => {
     if (isSaving) {
@@ -58,7 +80,7 @@ export default function EditProfileScreen() {
           ? 'Enter a valid email address.'
           : undefined;
     const nextPasswordError =
-      isEmailChanged && currentPassword.length === 0
+      showPasswordField && currentPassword.length === 0
         ? 'Enter your current password to change your email.'
         : undefined;
     setFullNameError(nextFullNameError);
@@ -70,10 +92,26 @@ export default function EditProfileScreen() {
 
     setIsSaving(true);
 
-    // Email first: nothing is saved and no code is sent if the password is
-    // wrong or the new address can't be used.
+    // Email first: nothing is saved and no code is sent unless the user has
+    // confirmed it's them and the new address can be used.
     if (isEmailChanged) {
-      const emailResult = await requestEmailChange(trimmedEmail, currentPassword);
+      if (!showPasswordField) {
+        const outcome = await confirmWithBiometrics("Confirm it's you to change your email");
+        if (outcome !== 'success') {
+          setIsSaving(false);
+          if (outcome === 'unavailable') {
+            setHasBiometrics(false);
+          } else if (outcome === 'use_password') {
+            setUsePassword(true);
+          }
+          // 'cancelled': stay here quietly.
+          return;
+        }
+      }
+      const emailResult = await requestEmailChange(
+        trimmedEmail,
+        showPasswordField ? currentPassword : undefined
+      );
       if (emailResult.error) {
         setIsSaving(false);
         if (emailResult.code === 'current_password_invalid') {
@@ -120,8 +158,8 @@ export default function EditProfileScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Personal information</Text>
         <Text style={styles.subtitle}>
-          To change your email, you&apos;ll need your current password and a code we send to the
-          new address.
+          To change your email, we&apos;ll confirm it&apos;s you, then send a code to the new
+          address.
         </Text>
 
         <TextField
@@ -141,7 +179,12 @@ export default function EditProfileScreen() {
           onChangeText={setEmail}
           errorMessage={emailError}
         />
-        {isEmailChanged ? (
+        {showUsePasswordLink ? (
+          <Pressable onPress={() => setUsePassword(true)} style={styles.usePasswordLink} hitSlop={8}>
+            <Text style={styles.usePasswordLinkText}>Use password instead</Text>
+          </Pressable>
+        ) : null}
+        {showPasswordField ? (
           <TextField
             label="Current password"
             placeholder="Enter your current password"
@@ -216,6 +259,15 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     marginBottom: spacing.lg,
+  },
+  // Same look as Sign In's "Forgot Password?" link.
+  usePasswordLink: {
+    alignSelf: 'flex-end',
+    marginBottom: spacing.lg,
+  },
+  usePasswordLinkText: {
+    ...typography.caption,
+    color: colors.textPrimary,
   },
   saveButton: {
     marginTop: spacing.sm,

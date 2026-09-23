@@ -100,10 +100,12 @@ type AuthContextValue = {
   /** Profile > Change password: checks the current password, then saves the
    * new one. Other sessions are signed out; this device stays signed in. */
   changePassword: (currentPassword: string, newPassword: string) => Promise<AuthResult>;
-  /** Edit Profile > email: checks the current password (same check as
-   * changePassword), and only if it's right asks Supabase to email a code
-   * to the new address. */
-  requestEmailChange: (newEmail: string, currentPassword: string) => Promise<AuthResult>;
+  /** Edit Profile > email: asks Supabase to email a code to the new
+   * address. Pass currentPassword when the user confirmed with their
+   * password: it's checked first (same check as changePassword) and no code
+   * is sent if it's wrong. Omit it only after a successful fingerprint /
+   * Face ID check (lib/biometrics). */
+  requestEmailChange: (newEmail: string, currentPassword?: string) => Promise<AuthResult>;
   /** Confirms the code sent to the new address; the email changes at once. */
   verifyEmailChangeCode: (newEmail: string, code: string) => Promise<AuthResult>;
   /** Sends a fresh code to the new address; the previous one stops working. */
@@ -404,9 +406,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       requestEmailChange: async (newEmail, currentPassword) => {
         // No code is sent unless the current password is right.
-        const check = await checkCurrentPassword(currentPassword);
-        if (check.error) {
-          return check;
+        if (currentPassword !== undefined) {
+          const check = await checkCurrentPassword(currentPassword);
+          if (check.error) {
+            return check;
+          }
         }
         // Sends the "Change email address" template (must contain
         // {{ .Token }}) to the new address only — "Secure email change" is
