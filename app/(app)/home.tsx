@@ -105,7 +105,7 @@ function StatCard({
 }
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const { filingHistory } = useFiling();
   const latestFiling = filingHistory[0];
   // Same "already filed" entries the Filing tab's history state shows —
@@ -117,7 +117,7 @@ export default function HomeScreen() {
   );
   const nextFilingYear = latestFiling ? parseInt(latestFiling.taxYear, 10) + 1 : undefined;
 
-  const firstName = user?.fullName?.trim().split(/\s+/)[0];
+  const firstName = profile?.full_name?.trim().split(/\s+/)[0];
   const [now] = useState(() => new Date());
   const timeGreeting = getTimeGreeting(now.getHours());
   const greeting = firstName ? `${timeGreeting} ${firstName}` : timeGreeting;

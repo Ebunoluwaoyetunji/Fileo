@@ -5,25 +5,29 @@
  * frame itself — reproduced as-is; flagged separately as a likely typo
  * rather than silently changed.
  *
- * Mock-only: there's no real NIN/BVN verification service. Both fields
- * just need to be exactly 11 digits — any 11-digit value "passes". The
- * raw values are validated and immediately discarded: they're never
- * logged, and nothing here writes them into navigation params or state.
+ * The verification itself is still a mock: there's no real NIN/BVN
+ * provider, so any value that's exactly 11 digits "passes". What's real now
+ * is where the result goes — recordIdentityVerification() writes
+ * identity_verified = true to the signed-in user's Supabase profiles row,
+ * along with masked copies of both numbers (last 4 digits only, masked on
+ * the device before anything is sent). The raw values are never logged,
+ * never put in navigation params, and never leave the device.
+ *
+ * Reached right after OTP Verification signs a new user in (via
+ * app/index.tsx), or on a later launch if the user never finished this
+ * step.
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AuthScreen } from '../../components/layout/AuthScreen';
 import { TextField } from '../../components/ui/TextField';
+import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
 const ID_LENGTH = 11;
-// Mock delay so the CTA's loading state feels like a real request — there's
-// still no verification service underneath, this just avoids an instant,
-// jarring jump straight to Home.
-const MOCK_VERIFY_DELAY_MS = 1000;
 
 function validateIdNumber(value: string, label: string): string | undefined {
   if (value.length === 0) {
@@ -39,20 +43,16 @@ function validateIdNumber(value: string, label: string): string | undefined {
 }
 
 export default function IdentityVerificationScreen() {
-  const { signIn } = useAuth();
-  const { fullName, email, phone } = useLocalSearchParams<{
-    fullName?: string;
-    email?: string;
-    phone?: string;
-  }>();
+  const { recordIdentityVerification } = useAuth();
 
   const [nin, setNin] = useState('');
   const [bvn, setBvn] = useState('');
   const [ninError, setNinError] = useState<string | undefined>();
   const [bvnError, setBvnError] = useState<string | undefined>();
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (isVerifying) {
       return;
     }
@@ -67,55 +67,60 @@ export default function IdentityVerificationScreen() {
     }
 
     setIsVerifying(true);
-    setTimeout(() => {
-      // Mock verification only — nin/bvn are validated above and discarded
-      // here, never logged or persisted.
-      signIn({
-        id: 'local-user',
-        fullName: fullName || 'FILEO User',
-        email: email || '',
-        phone: phone || undefined,
-      });
-      router.replace('/(app)/home');
-    }, MOCK_VERIFY_DELAY_MS);
+    // Masked inside recordIdentityVerification before the request is made.
+    const result = await recordIdentityVerification({ nin, bvn });
+    setIsVerifying(false);
+    if (result.error) {
+      setToastMessage(result.error);
+      return;
+    }
+    router.replace('/(app)/home');
   };
 
   return (
-    <AuthScreen
-      headingAccent="Verification your identity"
-      headingAccentColor={colors.textPrimary}
-      ctaLabel="Continue"
-      onSubmitCta={handleContinue}
-      ctaLoading={isVerifying}
-    >
-      <TextField
-        label="NIN Number"
-        placeholder="Enter your 11-digit NIN"
-        keyboardType="number-pad"
-        value={nin}
-        onChangeText={setNin}
-        errorMessage={ninError}
-      />
-      <Text style={styles.hint}>Dial 346# on your registered number</Text>
+    <>
+      <AuthScreen
+        headingAccent="Verification your identity"
+        headingAccentColor={colors.textPrimary}
+        ctaLabel="Continue"
+        onSubmitCta={handleContinue}
+        ctaLoading={isVerifying}
+      >
+        <TextField
+          label="NIN Number"
+          placeholder="Enter your 11-digit NIN"
+          keyboardType="number-pad"
+          value={nin}
+          onChangeText={setNin}
+          errorMessage={ninError}
+        />
+        <Text style={styles.hint}>Dial 346# on your registered number</Text>
 
-      <TextField
-        label="BVN"
-        placeholder="Enter your 11-digit BVN"
-        keyboardType="number-pad"
-        value={bvn}
-        onChangeText={setBvn}
-        errorMessage={bvnError}
-      />
-      <Text style={styles.hint}>Dial *565*0# on any network</Text>
+        <TextField
+          label="BVN"
+          placeholder="Enter your 11-digit BVN"
+          keyboardType="number-pad"
+          value={bvn}
+          onChangeText={setBvn}
+          errorMessage={bvnError}
+        />
+        <Text style={styles.hint}>Dial *565*0# on any network</Text>
 
-      <View style={styles.note}>
-        <Text style={styles.noteTitle}>Why do we need this ?</Text>
-        <Text style={styles.noteBody}>
-          Your NIN and BVN help us verify your identity and meet tax filing requirements. We use
-          your information only for verification and tax-related services.
-        </Text>
-      </View>
-    </AuthScreen>
+        <View style={styles.note}>
+          <Text style={styles.noteTitle}>Why do we need this ?</Text>
+          <Text style={styles.noteBody}>
+            Your NIN and BVN help us verify your identity and meet tax filing requirements. We use
+            your information only for verification and tax-related services.
+          </Text>
+        </View>
+      </AuthScreen>
+
+      <Toast
+        visible={toastMessage !== null}
+        message={toastMessage ?? ''}
+        onHide={() => setToastMessage(null)}
+      />
+    </>
   );
 }
 

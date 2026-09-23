@@ -1,7 +1,12 @@
 /**
  * Edit personal information — reached from Profile's "Personal
- * information" row. Local-only: updateUser() just merges these fields
- * into AuthContext's in-memory user, no real backend persists them.
+ * information" row. Saves full name and phone to the user's Supabase
+ * profiles row.
+ *
+ * Email is shown read-only: the login email lives in Supabase Auth, and
+ * changing it properly means Supabase's email-change flow (a confirmation
+ * sent to the new address) — editing just the profiles copy would leave
+ * the two out of sync. Not built yet.
  *
  * ⚠️ PLACEHOLDER UI — no Figma frame for this screen either.
  */
@@ -18,32 +23,33 @@ import { spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 
 export default function EditProfileScreen() {
-  const { user, updateUser } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
 
-  const [fullName, setFullName] = useState(user?.fullName ?? '');
-  const [email, setEmail] = useState(user?.email ?? '');
-  const [phone, setPhone] = useState(user?.phone ?? '');
+  const [fullName, setFullName] = useState(profile?.full_name ?? '');
+  const [phone, setPhone] = useState(profile?.phone ?? '');
   const [fullNameError, setFullNameError] = useState<string | undefined>();
-  const [emailError, setEmailError] = useState<string | undefined>();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
     const trimmedName = fullName.trim();
-    const trimmedEmail = email.trim();
     const nextFullNameError = trimmedName.length === 0 ? 'Enter your full name.' : undefined;
-    const nextEmailError = trimmedEmail.length === 0 ? 'Enter your email address.' : undefined;
-
     setFullNameError(nextFullNameError);
-    setEmailError(nextEmailError);
-    if (nextFullNameError || nextEmailError) {
+    if (nextFullNameError) {
       return;
     }
 
-    updateUser({
-      fullName: trimmedName,
-      email: trimmedEmail,
-      phone: phone.trim() || undefined,
-    });
+    setIsSaving(true);
+    const result = await updateProfile({ full_name: trimmedName, phone: phone.trim() || null });
+    setIsSaving(false);
+    if (result.error) {
+      setSaveError(result.error);
+      return;
+    }
     setShowToast(true);
   };
 
@@ -56,7 +62,7 @@ export default function EditProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Personal information</Text>
-        <Text style={styles.subtitle}>Local only for now — nothing here is saved to a server.</Text>
+        <Text style={styles.subtitle}>Email can&apos;t be changed here yet.</Text>
 
         <TextField
           label="Full name"
@@ -67,12 +73,9 @@ export default function EditProfileScreen() {
         />
         <TextField
           label="Email address"
-          placeholder="you@example.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-          errorMessage={emailError}
+          value={profile?.email ?? user?.email ?? ''}
+          editable={false}
+          style={styles.readOnlyInput}
         />
         <TextField
           label="Phone number"
@@ -82,9 +85,20 @@ export default function EditProfileScreen() {
           onChangeText={setPhone}
         />
 
-        <Button label="Save changes" variant="dark" onPress={handleSave} style={styles.saveButton} />
+        <Button
+          label="Save changes"
+          variant="dark"
+          onPress={handleSave}
+          loading={isSaving}
+          style={styles.saveButton}
+        />
       </ScrollView>
 
+      <Toast
+        visible={saveError !== null}
+        message={saveError ?? ''}
+        onHide={() => setSaveError(null)}
+      />
       <Toast
         visible={showToast}
         message="Profile updated."
@@ -126,5 +140,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: spacing.sm,
+  },
+  readOnlyInput: {
+    color: colors.textSecondary,
+    backgroundColor: colors.surface,
   },
 });

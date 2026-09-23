@@ -3,16 +3,27 @@
  * wordmark, "Create your Fileo account" heading, full name / email / phone
  * / password fields, and a "Login" link for existing users.
  *
- * Validation is presence-only (plus a password match check) — there's no
- * backend yet, so this just gates navigation, it doesn't verify anything.
+ * Local validation is presence-only (plus a password match check); the
+ * rest — email format, password strength, already-registered email — comes
+ * back from Supabase's signUp() and is shown on the matching field. On
+ * success Supabase emails a 6-digit code and this moves on to OTP
+ * Verification. full_name/phone go in as signup metadata, which the
+ * on_auth_user_created trigger copies into the user's profiles row.
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { AuthScreen } from '../../components/layout/AuthScreen';
 import { TextField } from '../../components/ui/TextField';
 import { Toast } from '../../components/ui/Toast';
+import { useAuth } from '../../state/authContext';
+
+// Supabase error codes that are about the email itself vs. the password,
+// so the message lands on the field the user needs to fix.
+const EMAIL_ERROR_CODES = ['user_already_exists', 'email_exists', 'email_address_invalid', 'validation_failed'];
+const PASSWORD_ERROR_CODES = ['weak_password'];
 
 export default function CreateAccountScreen() {
+  const { signUp } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -25,9 +36,13 @@ export default function CreateAccountScreen() {
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | undefined>();
 
-  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = async () => {
+    if (isSubmitting) {
+      return;
+    }
     const nextFullNameError = fullName.trim().length === 0 ? 'Enter your full name.' : undefined;
     const nextEmailError = email.trim().length === 0 ? 'Enter your email address.' : undefined;
     const nextPhoneError = phone.trim().length === 0 ? 'Enter your phone number.' : undefined;
@@ -56,7 +71,35 @@ export default function CreateAccountScreen() {
       return;
     }
 
-    setShowToast(true);
+    const trimmedEmail = email.trim();
+    setIsSubmitting(true);
+    const result = await signUp({
+      fullName: fullName.trim(),
+      email: trimmedEmail,
+      phone: phone.trim(),
+      password,
+    });
+    setIsSubmitting(false);
+
+    if (result.error) {
+      if (result.code && EMAIL_ERROR_CODES.includes(result.code)) {
+        setEmailError(result.error);
+      } else if (result.code && PASSWORD_ERROR_CODES.includes(result.code)) {
+        setPasswordError(result.error);
+      } else {
+        setToastMessage(result.error);
+      }
+      return;
+    }
+
+    // Only if "Confirm email" is turned off in Supabase — signed in
+    // already, no code to enter.
+    if (result.code === 'signed_in') {
+      router.replace('/');
+      return;
+    }
+
+    router.push({ pathname: '/(auth)/otp-verification', params: { email: trimmedEmail } });
   };
 
   return (
@@ -67,6 +110,7 @@ export default function CreateAccountScreen() {
         subtitle="Get started with a simpler way to file your taxes"
         ctaLabel="Create Account"
         onSubmitCta={handleCreateAccount}
+        ctaLoading={isSubmitting}
         bottomText="Already have an account?"
         bottomLinkLabel="Login"
         bottomLinkHref="/(auth)/sign-in"
@@ -114,15 +158,9 @@ export default function CreateAccountScreen() {
       </AuthScreen>
 
       <Toast
-        visible={showToast}
-        message="A verification code has been sent to your email and phone number."
-        onHide={() => {
-          setShowToast(false);
-          router.push({
-            pathname: '/(auth)/otp-verification',
-            params: { phone: phone.trim(), fullName: fullName.trim(), email: email.trim() },
-          });
-        }}
+        visible={toastMessage !== null}
+        message={toastMessage ?? ''}
+        onHide={() => setToastMessage(null)}
       />
     </>
   );
