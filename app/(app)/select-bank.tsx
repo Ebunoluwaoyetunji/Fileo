@@ -4,12 +4,14 @@
  * bank list, multi-select. Selections write straight into FilingContext's
  * shared `selectedPlatforms` (the same field select-platform reads/writes),
  * so a chosen bank shows up there as a real name rather than a generic
- * "Others" placeholder.
+ * "Others" placeholder. Saved with the rest of Select Platform when its
+ * Continue is tapped.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { RequireDraft } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
@@ -18,6 +20,14 @@ import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
 export default function SelectBankScreen() {
+  return (
+    <RequireDraft>
+      <SelectBankContent />
+    </RequireDraft>
+  );
+}
+
+function SelectBankContent() {
   const { selectedPlatforms, togglePlatform } = useFiling();
   const [query, setQuery] = useState('');
 

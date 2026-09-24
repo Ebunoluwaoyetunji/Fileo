@@ -38,9 +38,9 @@
  *     somewhere — flagged to the user rather than inventing a figure.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
@@ -52,17 +52,43 @@ import {
   useDocumentUploader,
 } from '../../components/documents/useDocumentUploader';
 import { colors } from '../../constants/colors';
-import { DEDUCTION_DEFINITIONS, deductionDocumentKey as documentKey } from '../../constants/deductions';
+import {
+  DEDUCTION_DEFINITIONS,
+  deductionDescription,
+  deductionDocumentKey as documentKey,
+} from '../../constants/deductions';
 import { radii, spacing, typography } from '../../constants/theme';
 import { deleteDocumentById } from '../../lib/documents';
 import { useFiling } from '../../state/filingContext';
 
 export default function DeductionsScreen() {
-  const { totalIncome, setDeductions, uploadedDocuments, documentIdsByKey, addUploadedDocument } =
-    useFiling();
+  return (
+    <RequireDraft>
+      <DeductionsContent />
+    </RequireDraft>
+  );
+}
+
+function DeductionsContent() {
+  const {
+    totalIncome,
+    deductions,
+    setDeductions,
+    uploadedDocuments,
+    documentIdsByKey,
+    addUploadedDocument,
+    taxYear,
+  } = useFiling();
   const uploader = useDocumentUploader();
+  const { isSaving, error: saveError, saveAndContinue } = useSaveAndContinue(
+    'return_review',
+    '/(app)/return-review'
+  );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
+  // Starts from the deductions already saved on this draft (when resuming).
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(deductions.map((d) => [d.id, true]))
+  );
   // Set on the first Continue attempt; once true, each card's error is
   // derived live from current state, so it clears itself the moment that
   // category is fixed (uploaded, or toggled back off) without extra effects.
@@ -93,8 +119,10 @@ export default function DeductionsScreen() {
       key,
       source: 'deductions',
       category: definition?.documentCategory ?? 'other',
+      taxYear,
       onUploaded: async (document) => {
-        addUploadedDocument(key, document.id);
+        // Point the slot at the new file before the old one goes.
+        await addUploadedDocument(key, document.id);
         if (!previousId) {
           setToastMessage('Document uploaded.');
           return;
@@ -121,7 +149,7 @@ export default function DeductionsScreen() {
       setHasAttemptedContinue(true);
       return;
     }
-    router.push('/(app)/return-review');
+    saveAndContinue();
   };
 
   return (
@@ -162,7 +190,9 @@ export default function DeductionsScreen() {
                   thumbColor={colors.background}
                 />
               </View>
-              <Text style={styles.deductionDescription}>{deduction.description}</Text>
+              <Text style={styles.deductionDescription}>
+                {deductionDescription(deduction, taxYear)}
+              </Text>
 
               {isEnabled ? (
                 isUploading ? (
@@ -223,8 +253,10 @@ export default function DeductionsScreen() {
         label="Continue"
         onPress={handleContinue}
         disabled={uploader.isAnyUploading}
+        loading={isSaving}
         style={styles.continueButton}
       />
+      <SaveErrorNote message={saveError} />
 
       <Toast
         key={toastMessage ?? 'none'}

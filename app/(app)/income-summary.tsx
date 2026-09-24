@@ -12,11 +12,15 @@
  * already labeled themselves). That also makes the zero-flagged-
  * transactions case reachable and testable: select only non-bank
  * platforms and this screen has nothing to flag.
+ *
+ * ⚠️ The confirmed amounts are saved to the draft (as kobo) when the user
+ * continues — they're these placeholder figures until real statement
+ * parsing exists. An amount already saved for a platform is kept.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
@@ -44,25 +48,39 @@ function formatNaira(amount: number) {
 }
 
 export default function IncomeSummaryScreen() {
-  const { selectedPlatforms, incomeSources, setIncomeSources } = useFiling();
+  return (
+    <RequireDraft>
+      <IncomeSummaryContent />
+    </RequireDraft>
+  );
+}
+
+function IncomeSummaryContent() {
+  const { selectedPlatforms, incomeSources, setIncomeSources, taxYear } = useFiling();
+  const { isSaving, error: saveError, saveAndContinue } = useSaveAndContinue(
+    'deductions',
+    '/(app)/deductions'
+  );
 
   const [flaggedTransactions, setFlaggedTransactions] = useState<FlaggedTransaction[]>([]);
   const [flaggedInitialized, setFlaggedInitialized] = useState(false);
   const hasFlaggedTransactions = flaggedTransactions.length > 0;
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
 
-  // Populate mock income lines from whatever was selected upstream, once —
-  // no real document parsing exists yet, so every source uses the same
-  // illustrative amount the Figma frame itself shows.
+  // One income line per selected platform/bank: the amount already saved
+  // for it, or else the illustrative figure the Figma frame itself shows (no
+  // real document parsing exists yet).
   useEffect(() => {
-    if (incomeSources.length === 0 && selectedPlatforms.length > 0) {
-      setIncomeSources(
-        selectedPlatforms.map((platform, index) => ({
-          id: `income-${index}-${platform}`,
-          label: platform,
-          amount: MOCK_INCOME_AMOUNT,
-        }))
-      );
+    const next = selectedPlatforms.map((platform) => ({
+      id: `income-${platform}`,
+      label: platform,
+      amount: incomeSources.find((s) => s.label === platform)?.amount ?? MOCK_INCOME_AMOUNT,
+    }));
+    const unchanged =
+      next.length === incomeSources.length &&
+      next.every((s, i) => s.label === incomeSources[i].label && s.amount === incomeSources[i].amount);
+    if (!unchanged) {
+      setIncomeSources(next);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatforms]);
@@ -79,7 +97,7 @@ export default function IncomeSummaryScreen() {
     setFlaggedInitialized(true);
     if (selectedPlatforms.some(isNigerianBank)) {
       setFlaggedTransactions([
-        { id: 'flagged-1', date: '12 Mar 2025', amount: 350000, category: null },
+        { id: 'flagged-1', date: `12 Mar ${taxYear}`, amount: 350000, category: null },
       ]);
     }
   }, [selectedPlatforms, flaggedInitialized]);
@@ -100,9 +118,10 @@ export default function IncomeSummaryScreen() {
     setShowSuccessSheet(true);
   };
 
-  const handleContinueFromSheet = () => {
-    setShowSuccessSheet(false);
-    router.push('/(app)/deductions');
+  const handleContinueFromSheet = async () => {
+    if (await saveAndContinue()) {
+      setShowSuccessSheet(false);
+    }
   };
 
   return (
@@ -201,7 +220,8 @@ export default function IncomeSummaryScreen() {
           />
           <Text style={styles.sheetTitle}>All transactions reviewed</Text>
           <Text style={styles.sheetBody}>You can now continue with your tax return.</Text>
-          <Button label="Continue" onPress={handleContinueFromSheet} />
+          <Button label="Continue" onPress={handleContinueFromSheet} loading={isSaving} />
+          <SaveErrorNote message={saveError} />
         </View>
       </BottomSheet>
     </Screen>

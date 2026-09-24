@@ -12,7 +12,14 @@
  * because it's the one rate implied by the Deductions frame itself: its
  * Rent card states "up to ₦500,000... Potential saving is up to ₦75,000",
  * and 75,000 / 500,000 = 15% exactly. Everything here is display logic
- * over whatever FilingContext already holds, not a real calculation.
+ * over whatever FilingContext already holds, not a real calculation, and
+ * none of it is saved (tax calculation moves to the server next).
+ *
+ * "Yes, submit my return" calls the server's submit_filing, which checks
+ * the draft is complete and returns the filing's reference. While it runs
+ * the button shows a spinner; a failure (no connection, or a step the
+ * server says is incomplete) shows under the buttons and can be retried.
+ * ⚠️ No design for the submitting / submit-failed states.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -23,6 +30,7 @@ import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
+import { RequireDraft, SaveErrorNote } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
@@ -33,7 +41,17 @@ function formatNaira(amount: number) {
 }
 
 export default function ReturnReviewScreen() {
-  const { totalIncome, totalDeductions, incomeSources, deductions } = useFiling();
+  return (
+    <RequireDraft>
+      <ReturnReviewContent />
+    </RequireDraft>
+  );
+}
+
+function ReturnReviewContent() {
+  const { totalIncome, totalDeductions, incomeSources, deductions, taxYear, submit } = useFiling();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const taxableIncome = Math.max(totalIncome - totalDeductions, 0);
   const estimatedTaxDue = Math.round(taxableIncome * MOCK_TAX_RATE);
   const estimatedTaxSavings = Math.round(totalDeductions * MOCK_TAX_RATE);
@@ -42,9 +60,32 @@ export default function ReturnReviewScreen() {
   const [calcExpanded, setCalcExpanded] = useState(false);
   const [showSubmitSheet, setShowSubmitSheet] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) {
+      return;
+    }
+    setIsSubmitting(true);
+    setSubmitError(null);
+    const result = await submit();
+    setIsSubmitting(false);
+    if (result.error) {
+      if (result.error.code === 'not_draft') {
+        setShowSubmitSheet(false);
+        router.replace('/(app)/filing-history');
+        return;
+      }
+      setSubmitError(
+        result.error.code === 'network'
+          ? 'Couldn’t submit. Check your connection and try again.'
+          : result.error.message
+      );
+      return;
+    }
     setShowSubmitSheet(false);
-    router.replace('/(app)/confirmation');
+    router.replace({
+      pathname: '/(app)/confirmation',
+      params: { reference: result.reference, submittedAt: result.submittedAt },
+    });
   };
 
   return (
@@ -167,7 +208,7 @@ export default function ReturnReviewScreen() {
           <View style={styles.filingInfoRow}>
             <View>
               <Text style={styles.filingInfoLabel}>Tax year</Text>
-              <Text style={styles.filingInfoValue}>2025</Text>
+              <Text style={styles.filingInfoValue}>{taxYear}</Text>
             </View>
             <View>
               <Text style={styles.filingInfoLabel}>State</Text>
@@ -217,13 +258,19 @@ export default function ReturnReviewScreen() {
             </View>
           </View>
 
-          <Button label="Yes, submit my return" variant="dark" onPress={handleSubmit} />
+          <Button
+            label="Yes, submit my return"
+            variant="dark"
+            onPress={handleSubmit}
+            loading={isSubmitting}
+          />
           <Button
             label="Not yet — let me review again"
             variant="ghost"
             onPress={() => setShowSubmitSheet(false)}
             style={styles.sheetSecondaryButton}
           />
+          <SaveErrorNote message={submitError} />
         </View>
       </BottomSheet>
     </Screen>

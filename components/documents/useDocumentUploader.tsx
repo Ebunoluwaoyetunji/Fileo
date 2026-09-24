@@ -39,7 +39,7 @@ import {
   takePhoto,
   uploadDocument,
 } from '../../lib/documents';
-import { CURRENT_TAX_YEAR } from '../../state/filingContext';
+import { currentTaxYear } from '../../lib/filings';
 import { BottomSheet } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
 
@@ -54,6 +54,8 @@ export type UploadRequest = {
   source: DocumentSource;
   /** A fixed category, or 'ask' to show the "What is this?" sheet. */
   category: DocumentCategory | 'ask';
+  /** The filing's tax year inside the flow; defaults to the current tax year. */
+  taxYear?: number;
   onUploaded: (document: DocumentRecord) => void;
 };
 
@@ -87,7 +89,7 @@ export function useDocumentUploader() {
       const result = await uploadDocument(file, {
         category,
         source: request.source,
-        taxYear: Number(CURRENT_TAX_YEAR),
+        taxYear: request.taxYear ?? currentTaxYear(),
       });
       if (result.error) {
         setSlot(request.key, {

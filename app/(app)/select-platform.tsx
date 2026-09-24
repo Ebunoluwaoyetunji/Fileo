@@ -7,9 +7,12 @@
  *
  * The "N platforms selected" count wasn't visible in any frame sent — added
  * in a standard spot (under the heading) as a reasonable default.
+ *
+ * Selections are saved to the draft filing when Continue is tapped.
  */
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
@@ -22,7 +25,19 @@ import { useFiling } from '../../state/filingContext';
 const NIGERIAN_FINTECHS_TITLE = 'Nigerian fintechs';
 
 export default function SelectPlatformScreen() {
+  return (
+    <RequireDraft>
+      <SelectPlatformContent />
+    </RequireDraft>
+  );
+}
+
+function SelectPlatformContent() {
   const { selectedPlatforms, togglePlatform } = useFiling();
+  const { isSaving, error, saveAndContinue } = useSaveAndContinue(
+    'upload_documents',
+    '/(app)/upload-documents'
+  );
   const selectedCount = selectedPlatforms.length;
 
   const handlePlatformPress = (categoryTitle: string, platform: string) => {
@@ -100,9 +115,11 @@ export default function SelectPlatformScreen() {
       <Button
         label="Continue"
         disabled={selectedCount === 0}
-        onPress={() => router.push('/(app)/upload-documents')}
+        loading={isSaving}
+        onPress={saveAndContinue}
         style={styles.continueButton}
       />
+      <SaveErrorNote message={error} />
     </Screen>
   );
 }

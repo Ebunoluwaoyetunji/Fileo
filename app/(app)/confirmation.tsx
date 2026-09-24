@@ -8,11 +8,15 @@
  * background process — there's no timer or job actually advancing them.
  * "Download Summary" can't generate or save a real file in this prototype,
  * so it says so via a toast rather than pretending to produce one.
+ *
+ * The reference number and "Approved by you" time are the real ones the
+ * server returned when the return was submitted (passed from Return
+ * Review). ⚠️ The reference line has no Figma design.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
@@ -51,24 +55,20 @@ const STATUS_STYLES: Record<StepStatus, { bg: string; text: string; label: strin
 };
 
 export default function ConfirmationScreen() {
-  const { resetFiling, recordSubmission } = useFiling();
+  const { reload } = useFiling();
+  const { reference, submittedAt } = useLocalSearchParams<{
+    reference?: string;
+    submittedAt?: string;
+  }>();
   const [showDownloadToast, setShowDownloadToast] = useState(false);
 
-  // Record this filing exactly once, the moment the user reaches this
-  // screen — Confirmation has no back button, and the only way back here
-  // is submitting a whole new filing, so "on mount" is a safe stand-in for
-  // "on submit" without return-review needing to know about filingHistory.
-  const hasRecorded = useRef(false);
+  // The draft is now a submitted filing: refresh so the File tab and Home
+  // show it in history.
   useEffect(() => {
-    if (hasRecorded.current) {
-      return;
-    }
-    hasRecorded.current = true;
-    recordSubmission();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    reload();
+  }, [reload]);
 
-  const [approvedAt] = useState(() => new Date());
+  const [approvedAt] = useState(() => (submittedAt ? new Date(submittedAt) : new Date()));
   const approvedTime = approvedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const approvedDate = approvedAt.toLocaleDateString([], {
     month: 'short',
@@ -83,9 +83,9 @@ export default function ConfirmationScreen() {
     { id: 'email', label: 'Confirmation email', status: 'waiting' },
   ];
 
+  // Back to Home, clearing the filing screens underneath.
   const handleDone = () => {
-    resetFiling();
-    router.replace('/(app)/home');
+    router.dismissTo('/(app)/home');
   };
 
   return (
@@ -99,6 +99,15 @@ export default function ConfirmationScreen() {
         We&apos;ll now review your return before submitting it. We&apos;ll keep you updated as
         each step is completed.
       </Text>
+
+      {reference ? (
+        <View style={styles.referenceRow}>
+          <Text style={styles.referenceLabel}>Reference number</Text>
+          <Text style={styles.referenceValue} selectable>
+            {reference}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.stepperCard}>
         {steps.map((step, index) => {
@@ -196,6 +205,19 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.lg,
+  },
+  referenceRow: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  referenceLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  referenceValue: {
+    ...typography.bodyStrong,
+    color: colors.textPrimary,
+    letterSpacing: 0.5,
   },
   stepperCard: {
     width: '100%',

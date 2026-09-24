@@ -17,12 +17,14 @@
  *    scrollable row containing all 3 (Total saved, Years filed, Penalties)
  *    — keeps the "Quick Stats" section heading, and reads as the more
  *    complete version of the two.
- *  - "Total saved" is computed for real: MOCK_TAX_RATE (the same 15% used
- *    on Return Review) against total deductions across past filings — not
- *    a hardcoded figure.
- *  - "Years filed" and "Recent Activity" both include MOCK_PRIOR_FILING
- *    (⚠️ illustrative, see filingContext.tsx) alongside the real
- *    filingHistory entries, same as the Filing tab's history state.
+ *  - "Total saved" is an on-the-fly estimate: MOCK_TAX_RATE (the same 15%
+ *    used on Return Review) against total deductions across the user's
+ *    submitted filings. Not stored; replaced when tax calculation moves to
+ *    the server.
+ *  - "Years filed" and "Recent Activity" are the user's submitted filings
+ *    from Supabase, same as the File tab's history. "Start Filing now" and
+ *    "+" resume a draft in progress (or start one for the current tax
+ *    year), and open the File tab once this year is filed.
  *  - Recent Activity's "Completed" pill is shown as a fixed label per row
  *    rather than that entry's real status ('Submitted'/'Filed') — it
  *    reads here as "you finished submitting this one," a simpler framing
@@ -37,11 +39,12 @@
  *    stale.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
+import { useStartFiling } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -49,9 +52,10 @@ import { GradientBackground } from '../../components/ui/GradientBackground';
 import { colors } from '../../constants/colors';
 import { layout, radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
-import { MOCK_PRIOR_FILING, MOCK_TAX_RATE, useFiling } from '../../state/filingContext';
+import { Toast } from '../../components/ui/Toast';
+import { currentTaxYear } from '../../lib/filings';
+import { MOCK_TAX_RATE, useFiling } from '../../state/filingContext';
 
-const FILING_ROUTE = '/(app)/select-platform' as const;
 const FILING_HISTORY_ROUTE = '/(app)/filing-history' as const;
 const filingIllustration = require('../../assets/images/home-filing-illustration.png');
 
@@ -106,23 +110,25 @@ function StatCard({
 
 export default function HomeScreen() {
   const { profile } = useAuth();
-  const { filingHistory } = useFiling();
-  const latestFiling = filingHistory[0];
-  // Same "already filed" entries the Filing tab's history state shows —
-  // real entries plus the one illustrative prior year, so the two screens
-  // can't disagree.
-  const historyEntries = latestFiling ? [...filingHistory, MOCK_PRIOR_FILING] : [];
+  const { filingHistory: historyEntries, reload } = useFiling();
+  const { start: goToFiling, isStarting, error: startError, clearError } = useStartFiling();
+  const latestFiling = historyEntries[0];
   const totalSaved = Math.round(
     historyEntries.reduce((sum, entry) => sum + entry.totalDeductions, 0) * MOCK_TAX_RATE
   );
-  const nextFilingYear = latestFiling ? parseInt(latestFiling.taxYear, 10) + 1 : undefined;
+  const nextFilingYear = latestFiling ? latestFiling.taxYear + 1 : undefined;
+
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload])
+  );
 
   const firstName = profile?.full_name?.trim().split(/\s+/)[0];
   const [now] = useState(() => new Date());
   const timeGreeting = getTimeGreeting(now.getHours());
   const greeting = firstName ? `${timeGreeting} ${firstName}` : timeGreeting;
 
-  const goToFiling = () => router.push(FILING_ROUTE);
   const goToFilingHistory = () => router.push(FILING_HISTORY_ROUTE);
   const goToNotifications = () => router.push('/(app)/notifications');
 
@@ -248,7 +254,7 @@ export default function HomeScreen() {
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
               />
-              <Text style={styles.filingTitle}>File your 2025 tax return</Text>
+              <Text style={styles.filingTitle}>File your {currentTaxYear()} tax return</Text>
               <Text style={styles.filingBody}>
                 We&apos;ll guide you through the process, step by step.
               </Text>
@@ -259,6 +265,7 @@ export default function HomeScreen() {
                 label="Start Filing now"
                 variant="dark"
                 onPress={goToFiling}
+                loading={isStarting}
                 style={styles.startFilingButton}
               />
             </Card>
@@ -276,6 +283,13 @@ export default function HomeScreen() {
       </Pressable>
 
       <BottomTabBar active="home" />
+
+      <Toast
+        key={startError ?? 'none'}
+        visible={startError !== null}
+        message={startError ?? ''}
+        onHide={clearError}
+      />
     </Screen>
   );
 }

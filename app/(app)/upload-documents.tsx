@@ -8,17 +8,18 @@
  *
  * "Upload" / "Upload manually" pick a real file (or photo) and save it to
  * the user's account (lib/documents: private storage + a documents row).
- * The platform then counts as covered in FilingContext's
- * `uploadedDocuments`, which also remembers the document's id so "Change"
- * can upload a replacement and only then delete the old file.
+ * The document is filed under the filing's tax year and linked to that
+ * platform's slot in the draft right away; "Change" uploads a replacement
+ * and only then deletes the old file. Continue saves the step.
  *
  * "Send upload link to my email" is still a mock (no email is sent): it
- * marks the pending platforms as covered without any file.
+ * only shows its toast and doesn't mark anything as uploaded, since
+ * submitting needs the real documents.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
@@ -40,7 +41,6 @@ import { useFiling } from '../../state/filingContext';
 // Mock auto-pull summary — same illustrative numbers for every bank,
 // matching the Figma frame's example exactly.
 const MOCK_PULL_SUMMARY = {
-  period: 'Jan – Dec 2025',
   transactions: '143 transactions',
   inflows: '₦4,820,000',
 };
@@ -64,8 +64,20 @@ function documentCategoryFor(platform: string): DocumentCategory {
 }
 
 export default function UploadDocumentsScreen() {
-  const { selectedPlatforms, uploadedDocuments, documentIdsByKey, addUploadedDocument } =
+  return (
+    <RequireDraft>
+      <UploadDocumentsContent />
+    </RequireDraft>
+  );
+}
+
+function UploadDocumentsContent() {
+  const { selectedPlatforms, uploadedDocuments, documentIdsByKey, addUploadedDocument, taxYear } =
     useFiling();
+  const { isSaving, error: saveError, saveAndContinue } = useSaveAndContinue(
+    'income_summary',
+    '/(app)/income-summary'
+  );
   const uploader = useDocumentUploader();
   const [showEmailToast, setShowEmailToast] = useState(false);
   const [uploadToast, setUploadToast] = useState<string | null>(null);
@@ -83,6 +95,7 @@ export default function UploadDocumentsScreen() {
       key: platform,
       source: 'upload_step',
       category: documentCategoryFor(platform),
+      taxYear,
       onUploaded: (document) => {
         addUploadedDocument(platform, document.id);
         setUploadToast('Document uploaded.');
@@ -99,8 +112,10 @@ export default function UploadDocumentsScreen() {
       key: platform,
       source: 'upload_step',
       category: documentCategoryFor(platform),
+      taxYear,
       onUploaded: async (document) => {
-        addUploadedDocument(platform, document.id);
+        // Point the slot at the new file before the old one goes.
+        await addUploadedDocument(platform, document.id);
         if (!previousId) {
           setUploadToast('Document uploaded.');
           return;
@@ -115,11 +130,8 @@ export default function UploadDocumentsScreen() {
     });
   };
 
+  // Mock: no email is sent, and nothing is marked as uploaded.
   const handleSendEmailLink = () => {
-    // Mock-only escape hatch: treats "I'll do it later via email" as
-    // satisfying the requirement for now, so the flow isn't stuck waiting
-    // on an email nothing here can actually send.
-    pendingManualPlatforms.forEach((platform) => addUploadedDocument(platform));
     setShowEmailToast(true);
   };
 
@@ -154,7 +166,7 @@ export default function UploadDocumentsScreen() {
                   <View style={styles.pullSummary}>
                     <View style={styles.pullRow}>
                       <Text style={styles.pullLabel}>Period covered</Text>
-                      <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.period}</Text>
+                      <Text style={styles.pullValue}>Jan – Dec {taxYear}</Text>
                     </View>
                     <View style={styles.pullRow}>
                       <Text style={styles.pullLabel}>Transactions found</Text>
@@ -256,9 +268,11 @@ export default function UploadDocumentsScreen() {
       <Button
         label="Continue"
         disabled={!allCovered || uploader.isAnyUploading}
-        onPress={() => router.push('/(app)/income-summary')}
+        loading={isSaving}
+        onPress={saveAndContinue}
         style={styles.continueButton}
       />
+      <SaveErrorNote message={saveError} />
 
       <Pressable onPress={handleSendEmailLink} style={styles.emailLinkRow}>
         <Text style={styles.emailLinkText}>

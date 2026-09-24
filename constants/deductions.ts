@@ -23,13 +23,13 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     id: 'rent',
     label: 'Rent payments',
     description:
-      'If you paid rent in 2025, you can deduct up to ₦500,000 from your taxable income. Potential saving is up to ₦75,000 off your tax bill.',
+      'If you paid rent in {taxYear}, you can deduct up to ₦500,000 from your taxable income. Potential saving is up to ₦75,000 off your tax bill.',
     documentLabel: 'rent receipt',
     documentCategory: 'receipt',
     computeAmount: () => 500000,
   },
   {
-    id: 'life-assurance',
+    id: 'life_assurance',
     label: 'Life assurance premium',
     description:
       'Full premium paid on a life insurance policy. Document needed — insurance premium receipt from a registered insurer.',
@@ -56,6 +56,13 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     computeAmount: (totalIncome) => Math.round(totalIncome * 0.025),
   },
 ];
+
+/** A deduction's description with the filing's tax year filled in. */
+export const deductionDescription = (definition: DeductionDefinition, taxYear: number) =>
+  definition.description.replace('{taxYear}', String(taxYear));
+
+/** The deduction types the database accepts (filing_deductions.deduction_type). */
+export type DeductionType = 'rent' | 'life_assurance' | 'pension' | 'nhf';
 
 /** Namespaced so this doesn't collide with platform names in the same `uploadedDocuments` array. */
 export const deductionDocumentKey = (deductionId: string) => `deduction:${deductionId}`;
