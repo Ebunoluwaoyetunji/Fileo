@@ -15,7 +15,7 @@
 //
 // It reads EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY from
 // your .env file. Use a test account, not a real customer's: it turns on
-// AI reading for that account and uses 3 of its 20 reads for the day.
+// AI reading for that account and uses 4 of its 20 reads for the day.
 import { createClient } from '@supabase/supabase-js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -136,7 +136,7 @@ async function main() {
   while (Date.now() < deadline) {
     const { data } = await supabase
       .from('document_extractions')
-      .select('*, extracted_transactions(category, needs_review, amount_kobo)')
+      .select('*, extracted_transactions(category, needs_review, amount_kobo, source_platform)')
       .in('document_id', uploaded.map((u) => u.row.id));
     for (const extraction of data ?? []) {
       results[extraction.document_id] = extraction;
@@ -187,6 +187,16 @@ async function main() {
         checks.push([Math.abs((r.suggested_income_kobo ?? 0) - Math.round(want.income * 100)) <= Math.round(want.income * 100) * 0.05, 'suggestion within 5% of the expected income']);
       } else {
         checks.push([r.suggested_income_kobo === null, 'no naira suggestion for a foreign-currency statement']);
+      }
+      const found = {};
+      for (const t of r.extracted_transactions) {
+        if (t.source_platform) found[t.source_platform] = (found[t.source_platform] ?? 0) + 1;
+      }
+      console.log(`   payouts from platforms recognised: ${JSON.stringify(found)}`);
+      if (want.expected_source_platforms) {
+        checks.push([JSON.stringify(found) === JSON.stringify(want.expected_source_platforms), `payouts recognised: ${JSON.stringify(want.expected_source_platforms)}`]);
+      } else {
+        checks.push([Object.keys(found).length === 0, 'no platform payouts claimed where there are none']);
       }
       for (const [ok, label] of checks) {
         console.log(`   ${ok ? 'OK  ' : 'CHECK'} ${label}`);

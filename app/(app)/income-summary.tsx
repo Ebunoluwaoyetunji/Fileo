@@ -17,6 +17,13 @@
  * being read the row says so and fills in when the result arrives. If it
  * couldn't be read, the row says why and the user types the amount.
  *
+ * Under an amount read from a statement: any payouts left out because
+ * they're already counted under another platform, and "See breakdown"
+ * (statement-breakdown.tsx). A statement that was uploaded but never read
+ * (the user chose "Enter manually") offers "Not sure of the amount? Let AI
+ * read your statement", which asks for consent and reads it — no new
+ * upload. A one-line tip explains what isn't income.
+ *
  * Flagged transactions are the real ones the AI wasn't sure about: each
  * shows its date, amount and description, and the user answers Income or
  * not (own transfer, refund, loan, reversal, other). Answers are saved
@@ -31,6 +38,7 @@
  * caption styles.
  */
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
@@ -57,6 +65,7 @@ import {
   Extraction,
   formatIsoDate,
   formatStatementAmount,
+  isReading,
   TransactionDecision,
 } from '../../lib/extractions';
 import { useFiling } from '../../state/filingContext';
@@ -81,6 +90,8 @@ function IncomeSummaryContent() {
     documentIdsByKey,
     extractionsByDocumentId,
     decideFlagged,
+    aiConsent,
+    readStatement,
   } = useFiling();
   useAiConsentPrompt();
   // Opened from Return Review's "Fix": highlight the source missing its
@@ -278,6 +289,60 @@ function IncomeSummaryContent() {
     }
   };
 
+  // Under each amount: payouts left out, "See breakdown" once a statement
+  // has been read, or — if it hasn't been read and the field is empty —
+  // an offer to let AI read the statement already uploaded.
+  const renderStatementLinks = (platform: string) => {
+    const documentId = documentIdsByKey[platform];
+    if (!documentId) {
+      return null;
+    }
+    const extraction = extractionFor(platform);
+    if (extraction?.status === 'done') {
+      return (
+        <View style={styles.statementLinks}>
+          {extraction.platformPayoutsKobo ? (
+            <Text style={styles.payoutNote}>
+              {formatStatementAmount(extraction.platformPayoutsKobo, extraction.currency)} of payouts
+              left out: already counted in your other platforms.
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() =>
+              router.push({ pathname: '/(app)/statement-breakdown', params: { documentId, platform } })
+            }
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`See breakdown for ${platform}`}
+            style={styles.linkButton}
+          >
+            <Text style={styles.linkText}>See breakdown</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    if (!extraction && !isReading(extraction) && (inputs[platform] ?? '').trim() === '') {
+      return (
+        <Pressable
+          onPress={() => {
+            if (aiConsent === 'allowed') {
+              readStatement(documentId);
+            } else {
+              // Allowing it starts reading every statement already uploaded.
+              router.push('/(app)/ai-consent');
+            }
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={[styles.statementLinks, styles.linkButton]}
+        >
+          <Text style={styles.linkText}>Not sure of the amount? Let AI read your statement</Text>
+        </Pressable>
+      );
+    }
+    return null;
+  };
+
   return (
     <Screen>
       <BackButton />
@@ -293,6 +358,13 @@ function IncomeSummaryContent() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.incomeTip}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.incomeTipText}>
+            Money moved between your own accounts, loans, refunds and platform payouts aren’t
+            income.
+          </Text>
+        </View>
         <Text style={styles.sectionTitle}>Income Summary</Text>
         <Card style={styles.summaryCard}>
           {selectedPlatforms.map((platform) => (
@@ -321,6 +393,7 @@ function IncomeSummaryContent() {
                 errorMessage={amountErrors[platform] || undefined}
                 accessibilityLabel={`Income from ${platform} in naira`}
               />
+              {renderStatementLinks(platform)}
             </View>
           ))}
           <View style={styles.totalRow}>
@@ -596,6 +669,34 @@ const styles = StyleSheet.create({
   summaryValue: {
     ...typography.bodyStrong,
     color: colors.textPrimary,
+  },
+  incomeTip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  incomeTipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  statementLinks: {
+    marginTop: -spacing.xs,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  payoutNote: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  linkButton: {
+    alignSelf: 'flex-start',
+  },
+  linkText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primary,
   },
   infoNote: {
     flexDirection: 'row',

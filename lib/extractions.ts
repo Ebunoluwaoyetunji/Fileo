@@ -52,6 +52,9 @@ export type Extraction = {
   currency: string | null;
   /** Server-calculated; null unless a naira statement was read. */
   suggestedIncomeKobo: number | null;
+  /** Payouts left out because they're already counted under another
+   * platform on the return (server-calculated). */
+  platformPayoutsKobo: number | null;
   warnings: ExtractionWarning[];
   errorCode: string | null;
   startedAt: string | null;
@@ -94,6 +97,7 @@ type Row = {
   period_end: string | null;
   currency: string | null;
   suggested_income_kobo: number | null;
+  platform_payouts_kobo: number | null;
   warnings: ExtractionWarning[] | null;
   error_code: string | null;
   started_at: string | null;
@@ -116,6 +120,7 @@ function toExtraction(row: Row): Extraction {
     periodEnd: row.period_end,
     currency: row.currency,
     suggestedIncomeKobo: row.suggested_income_kobo,
+    platformPayoutsKobo: row.platform_payouts_kobo,
     warnings: row.warnings ?? [],
     errorCode: row.error_code,
     startedAt: row.started_at,
@@ -142,7 +147,7 @@ export async function getExtractions(
   const { data, error } = await supabase
     .from('document_extractions')
     .select(
-      'id, document_id, status, period_start, period_end, currency, suggested_income_kobo, warnings, error_code, started_at, extracted_transactions(id, date, amount_kobo, description, user_decision, position)'
+      'id, document_id, status, period_start, period_end, currency, suggested_income_kobo, platform_payouts_kobo, warnings, error_code, started_at, extracted_transactions(id, date, amount_kobo, description, user_decision, position)'
     )
     .in('document_id', documentIds)
     .eq('extracted_transactions.needs_review', true);
@@ -196,11 +201,12 @@ export async function startExtraction(documentId: string): Promise<{ status: Sta
   }
 }
 
-/** Answers one flagged transaction. The server then recalculates the
- * suggested income. */
+/** Answers a flagged transaction, or overrules any other one (e.g. a
+ * payout that "is separate income"). null returns it to the automatic
+ * category. The server then recalculates the suggested income. */
 export async function decideTransaction(
   transactionId: string,
-  decision: TransactionDecision
+  decision: TransactionDecision | null
 ): Promise<{ error: boolean }> {
   const { data, error } = await supabase
     .from('extracted_transactions')
@@ -214,6 +220,137 @@ export async function decideTransaction(
 export async function setAiConsent(allow: boolean): Promise<{ error: boolean }> {
   const { error } = await supabase.rpc('set_ai_consent', { p_allow: allow });
   return { error: !!error };
+}
+
+// ─── Breakdown ("See breakdown") ─────────────────────────────────────────────
+
+export type BreakdownGroupKey =
+  | 'income'
+  | 'platform_payout'
+  | 'own_transfer'
+  | 'refund'
+  | 'loan'
+  | 'reversal'
+  | 'not_income'
+  | 'unsure'
+  | 'outside_year';
+
+export type BreakdownItem = {
+  id: string;
+  date: string;
+  amountMinor: number;
+  description: string;
+  /** Server category: the AI's, or 'platform_payout' when already counted. */
+  category: string;
+  sourcePlatform: string | null;
+  decision: TransactionDecision | null;
+  needsReview: boolean;
+  inYear: boolean;
+  counts: boolean;
+  group: BreakdownGroupKey;
+};
+
+export type Breakdown = {
+  currency: string | null;
+  taxYear: number;
+  suggestedIncomeKobo: number | null;
+  platformPayoutsKobo: number | null;
+  canEdit: boolean;
+  groups: { key: BreakdownGroupKey; totalMinor: number; count: number }[];
+  items: BreakdownItem[];
+};
+
+/** Every transaction in a read statement, grouped, with totals — all worked
+ * out by the server. */
+export async function getBreakdown(extractionId: string): Promise<Breakdown | null> {
+  const { data, error } = await supabase.rpc('get_extraction_breakdown', {
+    p_extraction_id: extractionId,
+  });
+  if (error || !data) {
+    return null;
+  }
+  const raw = data as {
+    currency: string | null;
+    tax_year: number;
+    suggested_income_kobo: number | null;
+    platform_payouts_kobo: number | null;
+    can_edit: boolean;
+    groups: { key: BreakdownGroupKey; total_kobo: number; count: number }[];
+    items: {
+      id: string;
+      date: string;
+      amount_kobo: number;
+      description: string;
+      category: string;
+      source_platform: string | null;
+      user_decision: TransactionDecision | null;
+      needs_review: boolean;
+      in_year: boolean;
+      counts: boolean;
+      group: BreakdownGroupKey;
+    }[];
+  };
+  return {
+    currency: raw.currency,
+    taxYear: raw.tax_year,
+    suggestedIncomeKobo: raw.suggested_income_kobo,
+    platformPayoutsKobo: raw.platform_payouts_kobo,
+    canEdit: raw.can_edit,
+    groups: raw.groups.map((g) => ({ key: g.key, totalMinor: g.total_kobo, count: g.count })),
+    items: raw.items.map((i) => ({
+      id: i.id,
+      date: i.date,
+      amountMinor: i.amount_kobo,
+      description: i.description,
+      category: i.category,
+      sourcePlatform: i.source_platform,
+      decision: i.user_decision,
+      needsReview: i.needs_review,
+      inYear: i.in_year,
+      counts: i.counts,
+      group: i.group,
+    })),
+  };
+}
+
+export function breakdownGroupLabel(key: BreakdownGroupKey, taxYear: number): string {
+  switch (key) {
+    case 'income':
+      return 'Counted as income';
+    case 'platform_payout':
+      return 'Already counted in another platform';
+    case 'own_transfer':
+      return 'Transfers between your own accounts';
+    case 'refund':
+      return 'Refunds';
+    case 'loan':
+      return 'Loans';
+    case 'reversal':
+      return 'Reversals';
+    case 'not_income':
+      return 'Other money that isn’t income';
+    case 'unsure':
+      return 'Needs your answer';
+    case 'outside_year':
+      return `Outside ${taxYear} (not counted)`;
+    default:
+      return '';
+  }
+}
+
+/** The decision that moves an item to income, or out of it. When the
+ * target is what the server would decide anyway, the user's decision is
+ * cleared (null) so the item follows the automatic category again —
+ * except for flagged items, which always need an explicit answer. */
+export function decisionToCountAsIncome(item: BreakdownItem, countAsIncome: boolean): TransactionDecision | null {
+  if (item.needsReview) {
+    return countAsIncome ? 'income' : 'not_income';
+  }
+  const automaticallyIncome = item.category === 'income';
+  if (countAsIncome === automaticallyIncome) {
+    return null;
+  }
+  return countAsIncome ? 'income' : 'not_income';
 }
 
 // ─── Wording ────────────────────────────────────────────────────────────────

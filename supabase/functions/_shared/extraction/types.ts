@@ -37,7 +37,35 @@ export interface RawTransaction {
   amount: number;
   description: string;
   category: TransactionCategory;
+  /** The payment platform this credit is a payout from (the account
+   * holder's own balance or earnings on it), or null. The server uses it to
+   * spot payouts already counted under another platform on the return. */
+  source_platform: PayoutPlatform | null;
 }
+
+/** Platforms whose payouts we recognise. Must match the app's platform
+ * names (constants/platforms.ts) and public.payout_platforms. */
+export const PAYOUT_PLATFORMS = [
+  'Paystack',
+  'Flutterwave',
+  'Upwork',
+  'Fiverr',
+  'Payoneer',
+  'PayPal',
+  'Deel',
+  'Stripe',
+  'Moniepoint',
+  'Opay',
+  'PalmPay',
+  'Selar',
+  'YouTube',
+  'TikTok',
+  'Substack',
+  'Patreon',
+  'Instagram',
+] as const;
+
+export type PayoutPlatform = (typeof PAYOUT_PLATFORMS)[number];
 
 /** Only these types reach a provider; everything else is refused earlier. */
 export type SupportedMimeType = 'application/pdf' | 'image/jpeg' | 'image/png';

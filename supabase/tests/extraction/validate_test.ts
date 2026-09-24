@@ -18,8 +18,8 @@ const good = (): RawExtraction => ({
   currency: 'NGN',
   total_inflows: 650000.25,
   transactions: [
-    { date: '2025-02-03', amount: 400000, description: 'Client payment', category: 'income' },
-    { date: '2025-05-09', amount: 250000.25, description: 'Payout', category: 'income' },
+    { date: '2025-02-03', amount: 400000, description: 'Client payment', category: 'income', source_platform: null },
+    { date: '2025-05-09', amount: 250000.25, description: 'PAYSTACK SETTLEMENT', category: 'income', source_platform: 'Paystack' },
   ],
 });
 
@@ -51,6 +51,9 @@ Deno.test('rejects anything that does not match exactly', () => {
   invalid(tx({ category: 'salary' }));
   invalid(tx({ description: '' }));
   invalid(tx({ note: 'extra key' }));
+  invalid(tx({ source_platform: 'Some Bank' })); // not a known platform
+  const { source_platform: _s, ...noSource } = good().transactions[0];
+  invalid({ ...good(), transactions: [noSource] }); // key missing
   invalid({ ...good(), readable: false }); // transactions on an unreadable file
 });
 
@@ -97,13 +100,22 @@ Deno.test('only unsure items in the tax year need the user', () => {
   const raw = validateRawExtraction({
     ...good(),
     transactions: [
-      { date: '2025-03-01', amount: 100, description: 'a', category: 'unsure' },
-      { date: '2024-12-31', amount: 100, description: 'b', category: 'unsure' },
-      { date: '2025-03-02', amount: 100, description: 'c', category: 'own_transfer' },
+      { date: '2025-03-01', amount: 100, description: 'a', category: 'unsure', source_platform: null },
+      { date: '2024-12-31', amount: 100, description: 'b', category: 'unsure', source_platform: null },
+      { date: '2025-03-02', amount: 100, description: 'c', category: 'own_transfer', source_platform: null },
     ],
     total_inflows: 300,
   });
   const built = buildExtraction(raw, 2025);
   if (built.kind !== 'done') throw new Error('expected done');
   assertEquals(built.transactions.map((t) => t.needs_review), [true, false, false]);
+});
+
+Deno.test('keeps where a payout came from; the server decides if it is already counted', () => {
+  const built = buildExtraction(validateRawExtraction(good()), 2025);
+  if (built.kind !== 'done') throw new Error('expected done');
+  assertEquals(built.transactions.map((t) => [t.ai_category, t.category, t.source_platform]), [
+    ['income', 'income', null],
+    ['income', 'income', 'Paystack'],
+  ]);
 });

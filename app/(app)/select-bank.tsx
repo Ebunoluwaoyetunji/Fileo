@@ -39,6 +39,10 @@ function SelectBankContent() {
     <Screen>
       <Text style={styles.title}>Other Nigerian Fintechs</Text>
       <Text style={styles.subtitle}>Select the banks that you received funds from</Text>
+      <Text style={styles.tip}>
+        Only add a bank if you also receive money there directly, not just payouts from your
+        platforms.
+      </Text>
 
       <View style={styles.searchRow}>
         <Ionicons name="search" size={18} color={colors.textSecondary} />
@@ -89,6 +93,12 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     color: colors.textPrimary,
     marginTop: spacing.md,
+  },
+  tip: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: -spacing.md,
+    marginBottom: spacing.md,
   },
   subtitle: {
     ...typography.body,

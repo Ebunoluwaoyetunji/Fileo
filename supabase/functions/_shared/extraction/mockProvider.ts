@@ -8,6 +8,12 @@
  *   (none)           a clean full-year naira statement: 12 payouts plus an own
  *                    transfer, a refund and a loan (none of which count)
  *   has-unsure       adds 3 transactions the AI isn't sure about (flagged)
+ *   has-payouts      adds payouts from platforms, as on a bank statement:
+ *                    Paystack settlements ₦250,000 + ₦180,000, an Upwork
+ *                    withdrawal ₦300,000 and a Payoneer transfer ₦120,000.
+ *                    They count as income unless that platform is also on
+ *                    the return, when the server marks them "already
+ *                    counted" (platform_payout)
  *   partial-year     covers only 1 Jul – 31 Dec of the tax year
  *   wrong-year       covers the year before the tax year
  *   usd              the statement is in US dollars
@@ -24,13 +30,26 @@
  *
  * Every mock read takes about 2 seconds. Token counts are reported as 0.
  */
-import { ExtractionError, type ExtractionProvider, type RawExtraction, type RawTransaction } from './types.ts';
+import {
+  ExtractionError,
+  type ExtractionProvider,
+  type PayoutPlatform,
+  type RawExtraction,
+  type RawTransaction,
+} from './types.ts';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Monthly payouts, naira. Sum: 4,180,500.50. */
 export const MOCK_MONTHLY_INCOME = [
   320000, 285000, 410000, 350000, 298500.5, 372000, 415000, 260000, 390000, 445000, 305000, 330000,
+];
+/** Platform payouts added by has-payouts, naira. */
+export const MOCK_PAYOUTS: { month: number; day: number; amount: number; description: string; platform: PayoutPlatform }[] = [
+  { month: 2, day: 9, amount: 250000, description: 'PAYSTACK SETTLEMENT PSTK-2291', platform: 'Paystack' },
+  { month: 4, day: 21, amount: 300000, description: 'UPWORK WITHDRAWAL 88213', platform: 'Upwork' },
+  { month: 6, day: 12, amount: 180000, description: 'PAYSTACK SETTLEMENT PSTK-3310', platform: 'Paystack' },
+  { month: 10, day: 7, amount: 120000, description: 'PAYONEER TRANSFER', platform: 'Payoneer' },
 ];
 /** Flagged ("unsure") items added by has-unsure, naira. */
 export const MOCK_UNSURE = [
@@ -54,15 +73,27 @@ function buildStatement(year: number, flags: Set<string>): RawExtraction {
         amount,
         description: `Payout settlement ${year}${pad(month)} to acct 0123456789`,
         category: 'income',
+        source_platform: null,
       });
     }
   });
   const extras: RawTransaction[] = [
-    { date: `${year}-${pad(Math.max(firstMonth, 4))}-10`, amount: 200000, description: 'Transfer from own savings', category: 'own_transfer' },
-    { date: `${year}-${pad(Math.max(firstMonth, 6))}-18`, amount: 12500, description: 'Refund - online purchase', category: 'refund' },
-    { date: `${year}-${pad(Math.max(firstMonth, 9))}-05`, amount: 500000, description: 'Loan disbursement', category: 'loan' },
+    { date: `${year}-${pad(Math.max(firstMonth, 4))}-10`, amount: 200000, description: 'Transfer from own savings', category: 'own_transfer', source_platform: null },
+    { date: `${year}-${pad(Math.max(firstMonth, 6))}-18`, amount: 12500, description: 'Refund - online purchase', category: 'refund', source_platform: null },
+    { date: `${year}-${pad(Math.max(firstMonth, 9))}-05`, amount: 500000, description: 'Loan disbursement', category: 'loan', source_platform: null },
   ];
   transactions.push(...extras);
+  if (flags.has('has-payouts')) {
+    for (const item of MOCK_PAYOUTS) {
+      transactions.push({
+        date: `${year}-${pad(Math.max(firstMonth, item.month))}-${pad(item.day)}`,
+        amount: item.amount,
+        description: item.description,
+        category: 'income',
+        source_platform: item.platform,
+      });
+    }
+  }
   if (flags.has('has-unsure')) {
     for (const item of MOCK_UNSURE) {
       const month = Math.max(firstMonth, item.month);
@@ -71,6 +102,7 @@ function buildStatement(year: number, flags: Set<string>): RawExtraction {
         amount: item.amount,
         description: item.description,
         category: 'unsure',
+        source_platform: null,
       });
     }
   }
@@ -100,6 +132,7 @@ export const mockProvider: ExtractionProvider = {
     const flags = new Set(
       [
         'has-unsure',
+        'has-payouts',
         'partial-year',
         'wrong-year',
         'usd',

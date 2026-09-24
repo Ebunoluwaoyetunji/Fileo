@@ -401,7 +401,9 @@ async function runExtraction(
     if (saveError) {
       throw new ExtractionError('internal', `could not save result ${saveError.code}`);
     }
-    const { error: suggestionError } = await admin.rpc('recalculate_extraction_suggestion', {
+    // Categories against the filing's platforms (payouts already counted
+    // under another platform), then the suggestion.
+    const { error: suggestionError } = await admin.rpc('recategorize_extraction', {
       p_extraction_id: extractionId,
     });
     if (suggestionError) {

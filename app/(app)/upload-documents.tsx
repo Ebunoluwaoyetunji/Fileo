@@ -60,7 +60,7 @@ function manualUploadDescription(platform: string): string {
   if (isNigerianBank(platform)) {
     return 'Account statement for the year';
   }
-  const contentPlatforms = ['YouTube', 'TikTok', 'Substack', 'Patreon', 'Instagram'];
+  const contentPlatforms = ['YouTube', 'TikTok', 'Substack', 'Patreon', 'Instagram', 'Selar'];
   return contentPlatforms.includes(platform)
     ? 'Earnings statement or payment report'
     : 'Transaction report or income statement';

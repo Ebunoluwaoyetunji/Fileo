@@ -19,7 +19,7 @@ export const PLATFORM_CATEGORIES: PlatformCategory[] = [
   },
   {
     title: 'Content & creator',
-    platforms: ['YouTube', 'TikTok', 'Substack', 'Patreon', 'Instagram', 'Others'],
+    platforms: ['YouTube', 'TikTok', 'Substack', 'Patreon', 'Instagram', 'Selar', 'Others'],
   },
 ];
 
@@ -49,6 +49,12 @@ export function isNigerianBank(name: string): boolean {
 /** Shown inline under a selected bank. Automatic bank connections don't
  * exist yet, so a bank works like any other income source: the user uploads
  * its statement (which Fileo can read for them) and confirms the amount. */
+/** Shown where banks are chosen: payouts from platforms into a bank are
+ * already counted under the platform, so adding the bank just for those
+ * would count the same money twice. */
+export const BANK_PAYOUTS_TIP =
+  'Only add your bank if you also receive money there directly, not just payouts from the platforms above.';
+
 export const BANK_STATEMENT_MESSAGE =
   'Upload a statement for this account. Automatic bank connection is coming soon.';
 

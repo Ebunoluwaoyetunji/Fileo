@@ -13,6 +13,7 @@
 import {
   ExtractionError,
   type RawExtraction,
+  PAYOUT_PLATFORMS,
   type RawTransaction,
   TRANSACTION_CATEGORIES,
   type TransactionCategory,
@@ -35,7 +36,7 @@ const TOP_KEYS = [
   'total_inflows',
   'transactions',
 ];
-const TRANSACTION_KEYS = ['amount', 'category', 'date', 'description'];
+const TRANSACTION_KEYS = ['amount', 'category', 'date', 'description', 'source_platform'];
 
 function invalid(detail: string): never {
   // `detail` names the field only — never its value.
@@ -104,6 +105,9 @@ export function validateRawExtraction(value: unknown): RawExtraction {
     if (!TRANSACTION_CATEGORIES.includes(t.category as TransactionCategory)) {
       invalid(`transaction ${i} category`);
     }
+    if (t.source_platform !== null && !(PAYOUT_PLATFORMS as readonly unknown[]).includes(t.source_platform)) {
+      invalid(`transaction ${i} source_platform`);
+    }
     return t as unknown as RawTransaction;
   });
   if ((!readable || !is_statement) && checked.length > 0) {
@@ -142,6 +146,11 @@ export type ExtractionWarning =
   | 'no_income_found';
 
 export interface StoredTransaction {
+  /** What the AI said. The server works out `category` from it and the
+   * filing's platforms (a payout from another selected platform becomes
+   * 'platform_payout'). */
+  ai_category: TransactionCategory;
+  source_platform: string | null;
   position: number;
   date: string;
   amount_kobo: number;
@@ -182,7 +191,9 @@ export function buildExtraction(raw: RawExtraction, taxYear: number): BuiltExtra
     date: t.date,
     amount_kobo: toKobo(t.amount) as number,
     description: cleanDescription(t.description),
+    ai_category: t.category,
     category: t.category,
+    source_platform: t.source_platform,
     // Only unsure items that could count towards this year's income need an
     // answer; ones from other years are left as they are.
     needs_review: t.category === 'unsure' && inYear(t.date),

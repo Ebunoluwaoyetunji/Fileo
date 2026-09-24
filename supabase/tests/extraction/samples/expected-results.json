@@ -61,6 +61,26 @@
     ],
     "expected_suggested_income": null
   },
+  "sample-bank-statement-with-payouts-2025.pdf": {
+    "currency": "NGN",
+    "period": [
+      "2025-01-01",
+      "2025-12-31"
+    ],
+    "pages": 1,
+    "total_credits": 3085500.5,
+    "income": 2935500.5,
+    "income_count": 8,
+    "not_income": {
+      "own_transfer": 150000
+    },
+    "expected_source_platforms": {
+      "Paystack": 3,
+      "Upwork": 1
+    },
+    "expected_warnings": [],
+    "note": "Read on its own, platform payouts are income (2,935,500.50). In a return that also has Paystack and Upwork, the server leaves them out as already counted, leaving 1,635,000.00 for this bank."
+  },
   "sample-statement-password.pdf": {
     "note": "Same as sample-bank-statement-2025.pdf, locked with the password test1234.",
     "expected_status": "unreadable",

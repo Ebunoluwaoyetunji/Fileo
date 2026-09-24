@@ -9,7 +9,14 @@
  * in a standard spot (under the heading) as a reasonable default.
  *
  * Selections are saved to the draft filing when Continue is tapped.
+ *
+ * A tip under the Nigerian fintechs (where banks are chosen, via "Others")
+ * explains that a bank should only be added for money received there
+ * directly: payouts from the platforms above are already counted in them.
+ * (The server also leaves such payouts out of a bank statement's
+ * suggestion.) ⚠️ No Figma design for the tip.
  */
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
@@ -18,7 +25,12 @@ import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { colors } from '../../constants/colors';
-import { BANK_STATEMENT_MESSAGE, isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
+import {
+  BANK_PAYOUTS_TIP,
+  BANK_STATEMENT_MESSAGE,
+  isNigerianBank,
+  PLATFORM_CATEGORIES,
+} from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -98,6 +110,13 @@ function SelectPlatformContent() {
                   );
                 })}
               </View>
+
+              {category.title === NIGERIAN_FINTECHS_TITLE ? (
+                <View style={styles.bankTip}>
+                  <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+                  <Text style={styles.bankTipText}>{BANK_PAYOUTS_TIP}</Text>
+                </View>
+              ) : null}
 
               {selectedBanks.length > 0 ? (
                 <View style={styles.autoPullNote}>
@@ -187,6 +206,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.primaryDark,
     marginTop: spacing.xs,
+  },
+  bankTip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  bankTipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
   autoPullNote: {
     backgroundColor: colors.primaryLight,

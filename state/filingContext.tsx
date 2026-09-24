@@ -143,12 +143,15 @@ type FilingContextValue = WorkingCopy & {
   extractionStartErrors: Record<string, string>;
   /** Starts (or retries) AI reading of a statement, if the user allowed it. */
   readStatement: (documentId: string) => Promise<void>;
-  /** Answers a flagged transaction; the server recalculates the suggestion. */
+  /** Answers a flagged transaction, or overrules any other (null: back to
+   * the automatic category); the server recalculates the suggestion. */
   decideFlagged: (
     documentId: string,
     transactionId: string,
-    decision: TransactionDecision
+    decision: TransactionDecision | null
   ) => Promise<{ error: boolean }>;
+  /** Re-reads one statement's result (e.g. after changes in its breakdown). */
+  refreshExtraction: (documentId: string) => Promise<void>;
   /** Submits the draft; the server checks it and returns the reference. */
   submit: () => Promise<
     { reference: string; submittedAt: string; error: null } | { reference: null; submittedAt: null; error: FilingError }
@@ -486,6 +489,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       extractionStartErrors,
       readStatement,
       decideFlagged,
+      refreshExtraction: (documentId: string) => refreshExtractions([documentId]),
       startFiling,
       saveProgress,
       submit,
