@@ -116,7 +116,7 @@ function SelectPlatformContent() {
         label="Continue"
         disabled={selectedCount === 0}
         loading={isSaving}
-        onPress={saveAndContinue}
+        onPress={() => saveAndContinue()}
         style={styles.continueButton}
       />
       <SaveErrorNote message={error} />

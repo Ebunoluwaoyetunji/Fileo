@@ -303,7 +303,7 @@ function UploadDocumentsContent() {
         label="Continue"
         disabled={!allCovered || uploader.isAnyUploading}
         loading={isSaving}
-        onPress={saveAndContinue}
+        onPress={() => saveAndContinue()}
         style={styles.continueButton}
       />
       <SaveErrorNote message={saveError} />

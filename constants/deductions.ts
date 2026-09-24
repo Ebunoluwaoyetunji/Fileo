@@ -15,7 +15,9 @@ export type DeductionDefinition = {
   documentLabel: string;
   /** How the uploaded document is filed in the user's Documents. */
   documentCategory: DocumentCategory;
-  computeAmount: (totalIncome: number) => number;
+  /** Label for the amount field: what the user actually paid in the tax
+   * year. The server's tax rules decide how much of it is allowed. */
+  amountLabel: string;
 };
 
 export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
@@ -23,10 +25,10 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     id: 'rent',
     label: 'Rent payments',
     description:
-      'If you paid rent in {taxYear}, you can deduct up to ₦500,000 from your taxable income. Potential saving is up to ₦75,000 off your tax bill.',
+      'If you rented your home in {taxYear}, 20% of the rent you paid can be deducted from your taxable income, up to ₦500,000.',
     documentLabel: 'rent receipt',
     documentCategory: 'receipt',
-    computeAmount: () => 500000,
+    amountLabel: 'Rent you paid in {taxYear} (₦)',
   },
   {
     id: 'life_assurance',
@@ -35,31 +37,35 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
       'Full premium paid on a life insurance policy. Document needed — insurance premium receipt from a registered insurer.',
     documentLabel: 'insurance premium receipt',
     documentCategory: 'receipt',
-    computeAmount: () => 0,
+    amountLabel: 'Premiums you paid in {taxYear} (₦)',
   },
   {
     id: 'pension',
     label: 'Pension contributions',
     description:
-      'If you contributed up to 8% of your monthly gross income to a registered PFA. Document needed — annual PFA statement.',
+      'Contributions you made to a registered pension fund (PFA or micro-pension) under the Pension Reform Act. Document needed — annual PFA statement.',
     documentLabel: 'PFA statement',
     documentCategory: 'other',
-    computeAmount: (totalIncome) => Math.round(totalIncome * 0.08),
+    amountLabel: 'Pension contributions you made in {taxYear} (₦)',
   },
   {
     id: 'nhf',
     label: 'National Housing Fund (NHF)',
     description:
-      '2.5% of monthly basic salary contributed to Federal Mortgage Bank. Document needed — NHF contribution statement.',
+      'Contributions you made to the National Housing Fund (Federal Mortgage Bank). Document needed — NHF contribution statement.',
     documentLabel: 'NHF contribution statement',
     documentCategory: 'other',
-    computeAmount: (totalIncome) => Math.round(totalIncome * 0.025),
+    amountLabel: 'NHF contributions you made in {taxYear} (₦)',
   },
 ];
 
 /** A deduction's description with the filing's tax year filled in. */
 export const deductionDescription = (definition: DeductionDefinition, taxYear: number) =>
   definition.description.replace('{taxYear}', String(taxYear));
+
+/** A deduction's amount-field label with the filing's tax year filled in. */
+export const deductionAmountLabel = (definition: DeductionDefinition, taxYear: number) =>
+  definition.amountLabel.replace('{taxYear}', String(taxYear));
 
 /** The deduction types the database accepts (filing_deductions.deduction_type). */
 export type DeductionType = 'rent' | 'life_assurance' | 'pension' | 'nhf';

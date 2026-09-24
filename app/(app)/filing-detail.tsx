@@ -25,11 +25,8 @@ import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
-import { Filing, getFiling, STATUS_LABELS } from '../../lib/filings';
-
-function formatNaira(amount: number) {
-  return `₦${amount.toLocaleString('en-NG')}`;
-}
+import { deductionsTotalKobo, Filing, getFiling, STATUS_LABELS } from '../../lib/filings';
+import { formatNaira } from '../../lib/money';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
@@ -184,12 +181,12 @@ export default function FilingDetailScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryColumn}>
               <Text style={styles.summaryLabel}>Total income</Text>
-              <Text style={styles.summaryValueStrong}>{formatNaira(filing.totalIncome)}</Text>
+              <Text style={styles.summaryValueStrong}>{formatNaira(filing.totalIncomeKobo)}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryColumn}>
               <Text style={styles.summaryLabel}>Total deductions</Text>
-              <Text style={styles.summaryValueStrong}>{formatNaira(filing.totalDeductions)}</Text>
+              <Text style={styles.summaryValueStrong}>{formatNaira(deductionsTotalKobo(filing))}</Text>
             </View>
           </View>
           {isFiled ? (
@@ -222,7 +219,9 @@ export default function FilingDetailScreen() {
               <View key={source.id} style={styles.detailRow}>
                 <PlatformIcon label={source.label} size={28} />
                 <Text style={styles.detailRowLabel}>{source.label}</Text>
-                <Text style={styles.detailRowValue}>{formatNaira(source.amount)}</Text>
+                <Text style={styles.detailRowValue}>
+                  {source.amountKobo === null ? '—' : formatNaira(source.amountKobo)}
+                </Text>
               </View>
             ))
           )}
@@ -236,7 +235,9 @@ export default function FilingDetailScreen() {
             filing.deductions.map((deduction) => (
               <View key={deduction.id} style={styles.detailRow}>
                 <Text style={styles.detailRowLabel}>{deduction.label}</Text>
-                <Text style={styles.detailRowValue}>{formatNaira(deduction.amount)}</Text>
+                <Text style={styles.detailRowValue}>
+                  {deduction.amountPaidKobo === null ? '—' : formatNaira(deduction.amountPaidKobo)}
+                </Text>
               </View>
             ))
           )}

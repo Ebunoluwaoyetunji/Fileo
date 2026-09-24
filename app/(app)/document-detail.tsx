@@ -7,7 +7,9 @@
  *  - "Open document" opens the file through a signed link that expires
  *    after a few minutes (never a public URL).
  *  - "Delete document" asks first (a sheet — no design), then removes both
- *    the file and its row, and returns to Documents.
+ *    the file and its row, and returns to Documents. A document that's part
+ *    of a submitted return can't be deleted (the database and storage rules
+ *    refuse it); instead of Delete, a short note says which return it's in.
  *
  * ⚠️ No design for the loading / not-found states or the delete sheet —
  * built from the existing BottomSheet, Button and text styles.
@@ -30,6 +32,7 @@ import {
   DocumentRecord,
   formatFileSize,
   getDocument,
+  getDocumentLock,
   getDocumentUrl,
 } from '../../lib/documents';
 import { useFiling } from '../../state/filingContext';
@@ -56,6 +59,8 @@ export default function DocumentDetailScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleted, setIsDeleted] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Part of a submitted return? Then it can't be deleted.
+  const [lockedYear, setLockedYear] = useState<number | null>(null);
 
   const load = async () => {
     if (!id) {
@@ -73,6 +78,7 @@ export default function DocumentDetailScreen() {
       return;
     }
     setDocument(result.document);
+    setLockedYear((await getDocumentLock(result.document.id))?.taxYear ?? null);
     setLoadState('loaded');
   };
 
@@ -129,7 +135,9 @@ export default function DocumentDetailScreen() {
     setIsDeleting(false);
     if (error) {
       setDeleteError(
-        error.code === 'network' ? error.message : 'Couldn’t delete this document. Please try again.'
+        error.code === 'network' || error.code === 'locked'
+          ? error.message
+          : 'Couldn’t delete this document. Please try again.'
       );
       return;
     }
@@ -224,18 +232,28 @@ export default function DocumentDetailScreen() {
           loading={isOpening}
           disabled={isDeleted}
         />
-        <Pressable
-          onPress={() => {
-            setDeleteError(null);
-            setIsConfirmingDelete(true);
-          }}
-          style={styles.deleteButton}
-          hitSlop={8}
-          disabled={isDeleted}
-          accessibilityRole="button"
-        >
-          <Text style={styles.deleteLabel}>Delete document</Text>
-        </Pressable>
+        {lockedYear !== null ? (
+          <View style={styles.lockedRow}>
+            <Ionicons name="lock-closed-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.lockedText}>
+              This document is part of your submitted {lockedYear} return, so it can&apos;t be
+              deleted.
+            </Text>
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => {
+              setDeleteError(null);
+              setIsConfirmingDelete(true);
+            }}
+            style={styles.deleteButton}
+            hitSlop={8}
+            disabled={isDeleted}
+            accessibilityRole="button"
+          >
+            <Text style={styles.deleteLabel}>Delete document</Text>
+          </Pressable>
+        )}
       </View>
 
       <BottomSheet visible={isConfirmingDelete} onClose={() => setIsConfirmingDelete(false)}>
@@ -322,6 +340,19 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
+  },
+  lockedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  lockedText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   deleteButton: {
     alignSelf: 'center',

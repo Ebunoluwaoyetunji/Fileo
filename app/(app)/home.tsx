@@ -17,10 +17,9 @@
  *    scrollable row containing all 3 (Total saved, Years filed, Penalties)
  *    — keeps the "Quick Stats" section heading, and reads as the more
  *    complete version of the two.
- *  - "Total saved" is an on-the-fly estimate: MOCK_TAX_RATE (the same 15%
- *    used on Return Review) against total deductions across the user's
- *    submitted filings. Not stored; replaced when tax calculation moves to
- *    the server.
+ *  - "Total saved" is what the user's deductions saved across their
+ *    submitted returns: the server's frozen tax calculation for each (tax
+ *    without deductions − tax due).
  *  - "Years filed" and "Recent Activity" are the user's submitted filings
  *    from Supabase, same as the File tab's history. "Start Filing now" and
  *    "+" resume a draft in progress (or start one for the current tax
@@ -54,14 +53,12 @@ import { layout, radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
 import { Toast } from '../../components/ui/Toast';
 import { currentTaxYear } from '../../lib/filings';
-import { MOCK_TAX_RATE, useFiling } from '../../state/filingContext';
+import { taxSavedKobo } from '../../lib/filings';
+import { formatNaira } from '../../lib/money';
+import { useFiling } from '../../state/filingContext';
 
 const FILING_HISTORY_ROUTE = '/(app)/filing-history' as const;
 const filingIllustration = require('../../assets/images/home-filing-illustration.png');
-
-function formatNaira(amount: number) {
-  return `₦${amount.toLocaleString('en-NG')}`;
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -113,8 +110,12 @@ export default function HomeScreen() {
   const { filingHistory: historyEntries, reload } = useFiling();
   const { start: goToFiling, isStarting, error: startError, clearError } = useStartFiling();
   const latestFiling = historyEntries[0];
-  const totalSaved = Math.round(
-    historyEntries.reduce((sum, entry) => sum + entry.totalDeductions, 0) * MOCK_TAX_RATE
+  // What the user's deductions saved across their submitted returns, from
+  // the server's frozen calculations (returns submitted before tax was
+  // calculated on the server have none, so count as ₦0).
+  const totalSaved = historyEntries.reduce(
+    (sum, entry) => sum + (entry.taxCalculation ? taxSavedKobo(entry.taxCalculation) : 0),
+    0
   );
   const nextFilingYear = latestFiling ? latestFiling.taxYear + 1 : undefined;
 

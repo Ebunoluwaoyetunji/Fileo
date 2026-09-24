@@ -100,14 +100,14 @@ export function useSaveAndContinue(nextStep: FilingStep, nextRoute: Href) {
   const [error, setError] = useState<string | null>(null);
 
   /** Returns true once saved (and navigated). */
-  const saveAndContinue = async (): Promise<boolean> => {
+  const saveAndContinue = async (options?: { incomeConfirmed?: boolean }): Promise<boolean> => {
     if (isSaving) {
       return false;
     }
     setIsSaving(true);
     setError(null);
     // Fixing something from Return Review: save, and go straight back there.
-    const result = await saveProgress(isFixing ? 'return_review' : nextStep);
+    const result = await saveProgress(isFixing ? 'return_review' : nextStep, options);
     setIsSaving(false);
     if (result.error) {
       if (result.error.code === 'not_draft') {

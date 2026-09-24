@@ -24,21 +24,20 @@
  *    Create Account's on-submit validation) and clear live as each
  *    category is fixed or toggled back off.
  *
- * The frame has no amount-entry fields — eligibility is toggle-only — so
- * each category's stored deduction amount is a mock computed figure, not
- * something the user typed in:
- *   - Rent: the frame's own stated cap, ₦500,000.
- *   - Pension: 8% of totalIncome (the frame's stated rate).
- *   - NHF: 2.5% of totalIncome (the frame's stated rate, using totalIncome
- *     as a stand-in for "monthly basic salary" — there's no separate salary
- *     figure collected anywhere in this flow).
- *   - Life assurance: the frame gives no rate or cap for this one ("full
- *     premium paid" isn't computable from anything already collected), so
- *     toggling it on contributes ₦0 until a real amount is captured
- *     somewhere — flagged to the user rather than inventing a figure.
+ * Each claimed deduction also has an amount field: what the user actually
+ * paid in the tax year (rent paid, pension / NHF contributions, life
+ * assurance premiums), in naira with commas, stored as whole kobo. The
+ * server's tax rules decide how much of it is allowed (e.g. rent relief is
+ * 20% of rent paid, capped) — the app never works that out. A deduction the
+ * tax year doesn't allow (rent relief on a 2025 return) is shown switched
+ * off with the reason from the rules, and isn't claimed.
+ * ⚠️ No Figma design for the amount field or the not-available state.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
+import { TextField } from '../../components/ui/TextField';
+import { getTaxRules, ReliefRule } from '../../lib/filings';
+import { checkAmount, formatNairaInput, koboToInput, parseNairaInput } from '../../lib/money';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import {
   RequireDraft,
@@ -59,6 +58,7 @@ import {
 import { colors } from '../../constants/colors';
 import {
   DEDUCTION_DEFINITIONS,
+  deductionAmountLabel,
   deductionDescription,
   deductionDocumentKey as documentKey,
 } from '../../constants/deductions';
@@ -76,7 +76,6 @@ export default function DeductionsScreen() {
 
 function DeductionsContent() {
   const {
-    totalIncome,
     deductions,
     setDeductions,
     uploadedDocuments,
@@ -99,6 +98,25 @@ function DeductionsContent() {
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(deductions.map((d) => [d.id, true]))
   );
+  const [amountInputs, setAmountInputs] = useState<Record<string, string>>(() =>
+    Object.fromEntries(deductions.map((d) => [d.id, koboToInput(d.amountPaidKobo)]))
+  );
+  // Which deductions this tax year allows (the server's rules), e.g. no
+  // rent relief for 2025 income.
+  const [reliefRules, setReliefRules] = useState<Record<string, ReliefRule> | null>(null);
+  useEffect(() => {
+    let isMounted = true;
+    getTaxRules(taxYear).then((rules) => {
+      if (isMounted && rules) {
+        setReliefRules(rules.reliefs);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [taxYear]);
+  const isAllowed = (id: string) => !reliefRules || reliefRules[id]?.allowed !== false;
+  const isClaimed = (id: string) => !!enabled[id] && isAllowed(id);
   // Set on the first Continue attempt; once true, each card's error is
   // derived live from current state, so it clears itself the moment that
   // category is fixed (uploaded, or toggled back off) without extra effects.
@@ -107,14 +125,19 @@ function DeductionsContent() {
   // Keep FilingContext in sync as the user toggles, so return-review sees
   // current data even if they navigate away without an explicit save step.
   useEffect(() => {
-    const nextDeductions = DEDUCTION_DEFINITIONS.filter((d) => enabled[d.id]).map((d) => ({
+    const nextDeductions = DEDUCTION_DEFINITIONS.filter((d) => isClaimed(d.id)).map((d) => ({
       id: d.id,
       label: d.label,
-      amount: d.computeAmount(totalIncome),
+      amountPaidKobo: parseNairaInput(amountInputs[d.id] ?? ''),
     }));
     setDeductions(nextDeductions);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, totalIncome]);
+  }, [enabled, amountInputs, reliefRules]);
+
+  const amountError = (id: string): string | undefined => {
+    const result = checkAmount(amountInputs[id] ?? '', 'Enter the amount you paid.');
+    return result.error ?? undefined;
+  };
 
   const toggleDeduction = (id: string) => {
     setEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -152,10 +175,12 @@ function DeductionsContent() {
     if (uploader.isAnyUploading) {
       return;
     }
-    const hasMissingDocument = DEDUCTION_DEFINITIONS.some(
-      (d) => enabled[d.id] && !uploadedDocuments.includes(documentKey(d.id))
+    const hasMissing = DEDUCTION_DEFINITIONS.some(
+      (d) =>
+        isClaimed(d.id) &&
+        (!uploadedDocuments.includes(documentKey(d.id)) || amountError(d.id) !== undefined)
     );
-    if (hasMissingDocument) {
+    if (hasMissing) {
       setHasAttemptedContinue(true);
       return;
     }
@@ -181,7 +206,10 @@ function DeductionsContent() {
         </Card>
 
         {DEDUCTION_DEFINITIONS.map((deduction) => {
-          const isEnabled = !!enabled[deduction.id];
+          const allowed = isAllowed(deduction.id);
+          const isEnabled = !!enabled[deduction.id] && allowed;
+          const showAmountError =
+            (hasAttemptedContinue || focus === deduction.id) && isEnabled && !!amountError(deduction.id);
           const isUploaded = uploadedDocuments.includes(documentKey(deduction.id));
           const uploadState = uploader.slot(documentKey(deduction.id));
           const isUploading = uploadState.status === 'uploading';
@@ -212,14 +240,41 @@ function DeductionsContent() {
                   <Text style={styles.deductionTitle}>{deduction.label}</Text>
                   <Switch
                     value={isEnabled}
+                    disabled={!allowed}
                     onValueChange={() => toggleDeduction(deduction.id)}
                     trackColor={{ false: colors.border, true: colors.primary }}
                     thumbColor={colors.background}
                   />
                 </View>
-                <Text style={styles.deductionDescription}>
-                  {deductionDescription(deduction, taxYear)}
-                </Text>
+                {allowed ? (
+                  <Text style={styles.deductionDescription}>
+                    {deductionDescription(deduction, taxYear)}
+                  </Text>
+                ) : (
+                  <View style={styles.notAvailableRow}>
+                    <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+                    <Text style={styles.notAvailableText}>
+                      Not available for {taxYear}.{' '}
+                      {reliefRules?.[deduction.id]?.reason ?? ''}
+                    </Text>
+                  </View>
+                )}
+
+                {isEnabled ? (
+                  <View style={styles.amountWrap}>
+                    <TextField
+                      label={deductionAmountLabel(deduction, taxYear)}
+                      placeholder="0"
+                      keyboardType="decimal-pad"
+                      value={amountInputs[deduction.id] ?? ''}
+                      onChangeText={(text) =>
+                        setAmountInputs((prev) => ({ ...prev, [deduction.id]: formatNairaInput(text) }))
+                      }
+                      errorMessage={showAmountError ? amountError(deduction.id) : undefined}
+                      accessibilityLabel={`${deduction.label}: amount paid in naira`}
+                    />
+                  </View>
+                ) : null}
 
                 {isEnabled ? (
                   isUploading ? (
@@ -372,6 +427,21 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.danger,
     marginTop: spacing.xs,
+  },
+  notAvailableRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  notAvailableText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  amountWrap: {
+    marginTop: spacing.md,
+    marginBottom: -spacing.md,
   },
   uploadingWrap: {
     marginTop: spacing.md,

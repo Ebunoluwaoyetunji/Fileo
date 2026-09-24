@@ -5,15 +5,13 @@
  * cards visible behind it), not a separate route — built on the existing
  * BottomSheet component, same pattern as Income Summary's success sheet.
  *
- * IMPORTANT: there's no real tax calculation engine here. "Estimated tax
- * savings"/"Estimated tax due" use one flat, clearly-mock 15% rate against
- * deductions/taxable income — this is NOT how Nigerian personal income tax
- * actually works (it's progressive/bracketed in reality). 15% was picked
- * because it's the one rate implied by the Deductions frame itself: its
- * Rent card states "up to ₦500,000... Potential saving is up to ₦75,000",
- * and 75,000 / 500,000 = 15% exactly. Everything here is display logic
- * over whatever FilingContext already holds, not a real calculation, and
- * none of it is saved (tax calculation moves to the server next).
+ * The tax figures are the server's (filing_tax_calculations, worked out
+ * from the saved income and deductions under that tax year's rules and
+ * recalculated on every save) — the app only displays them. A simple
+ * breakdown (income → reliefs → taxable income → tax due) is always shown;
+ * "Tax calculation" opens the detail: every relief (including any claimed
+ * but not applied, with the reason), tax per band, and the minimum-tax
+ * check. ⚠️ No design for the breakdown card or the calculation detail.
  *
  * "Yes, submit my return" calls the server's submit_filing, which checks
  * the draft is complete and returns the filing's reference. While it runs
@@ -46,10 +44,16 @@ import { Screen } from '../../components/layout/Screen';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 import { describeMissingItem, getMissingItems, MissingItem } from '../../lib/filings';
-import { MOCK_TAX_RATE, useFiling } from '../../state/filingContext';
+import { RELIEF_LABELS, TaxBand, taxSavedKobo } from '../../lib/filings';
+import { formatNaira } from '../../lib/money';
+import { useFiling } from '../../state/filingContext';
 
-function formatNaira(amount: number) {
-  return `₦${amount.toLocaleString('en-NG')}`;
+function bandLabel(band: TaxBand, index: number) {
+  const rate = `${band.rateBp / 100}%`;
+  if (band.widthKobo === null) {
+    return `Above ${formatNaira(band.fromKobo)} at ${rate}`;
+  }
+  return `${index === 0 ? 'First' : 'Next'} ${formatNaira(band.widthKobo)} at ${rate}`;
 }
 
 export default function ReturnReviewScreen() {
@@ -62,10 +66,8 @@ export default function ReturnReviewScreen() {
 
 function ReturnReviewContent() {
   const {
-    totalIncome,
-    totalDeductions,
+    totalIncomeKobo,
     incomeSources,
-    deductions,
     taxYear,
     submit,
     draft,
@@ -106,9 +108,8 @@ function ReturnReviewContent() {
 
   const canSubmit = checkState === 'done' && missingItems.length === 0;
   const missingDetails = missingItems.map(describeMissingItem);
-  const taxableIncome = Math.max(totalIncome - totalDeductions, 0);
-  const estimatedTaxDue = Math.round(taxableIncome * MOCK_TAX_RATE);
-  const estimatedTaxSavings = Math.round(totalDeductions * MOCK_TAX_RATE);
+  // The server's calculation for this draft (display only).
+  const calc = draft?.taxCalculation ?? null;
 
   const [incomeExpanded, setIncomeExpanded] = useState(false);
   const [calcExpanded, setCalcExpanded] = useState(false);
@@ -191,19 +192,44 @@ function ReturnReviewContent() {
             <View style={styles.statColumn}>
               <Ionicons name="download-outline" size={18} color={colors.success} />
               <Text style={styles.statLabel}>Estimated tax savings</Text>
-              <Text style={styles.statValueSavings}>{formatNaira(estimatedTaxSavings)}</Text>
+              <Text style={styles.statValueSavings}>{calc ? formatNaira(taxSavedKobo(calc)) : '—'}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statColumn}>
               <Ionicons name="wallet-outline" size={18} color={colors.textInverse} />
               <Text style={styles.statLabel}>Estimated tax due</Text>
-              <Text style={styles.statValueDue}>{formatNaira(estimatedTaxDue)}</Text>
+              <Text style={styles.statValueDue}>{calc ? formatNaira(calc.taxDueKobo) : '—'}</Text>
             </View>
           </View>
           <View style={styles.statsFooter}>
-            <Text style={styles.statsFooterText}>Based on the information you&apos;ve provided.</Text>
+            <Text style={styles.statsFooterText}>
+              {calc
+                ? 'Based on the information you’ve provided.'
+                : 'We’ll work out your tax once your income is entered.'}
+            </Text>
           </View>
         </View>
+
+        {calc ? (
+          <Card style={styles.breakdownCard}>
+            <View style={styles.calcRow}>
+              <Text style={styles.detailRowLabel}>Income</Text>
+              <Text style={styles.detailRowValue}>{formatNaira(calc.incomeAfterExpensesKobo)}</Text>
+            </View>
+            <View style={styles.calcRow}>
+              <Text style={styles.detailRowLabel}>Reliefs and deductions</Text>
+              <Text style={styles.detailRowValue}>− {formatNaira(calc.totalReliefsKobo)}</Text>
+            </View>
+            <View style={[styles.calcRow, styles.calcRowStrong]}>
+              <Text style={styles.detailRowLabelStrong}>Taxable income</Text>
+              <Text style={styles.detailRowValueStrong}>{formatNaira(calc.taxableIncomeKobo)}</Text>
+            </View>
+            <View style={[styles.calcRow, styles.calcRowStrong]}>
+              <Text style={styles.detailRowLabelStrong}>Tax due</Text>
+              <Text style={styles.detailRowValueStrong}>{formatNaira(calc.taxDueKobo)}</Text>
+            </View>
+          </Card>
+        ) : null}
 
         <Pressable
           onPress={() => setIncomeExpanded((prev) => !prev)}
@@ -213,7 +239,7 @@ function ReturnReviewContent() {
           <Card style={styles.expandableRow}>
             <Text style={styles.expandableLabel}>Income Summary</Text>
             <View style={styles.expandableRight}>
-              <Text style={styles.expandableValue}>{formatNaira(totalIncome)}</Text>
+              <Text style={styles.expandableValue}>{formatNaira(totalIncomeKobo)}</Text>
               <Ionicons
                 name={incomeExpanded ? 'chevron-down' : 'chevron-forward'}
                 size={18}
@@ -231,7 +257,9 @@ function ReturnReviewContent() {
                 <View key={source.id} style={styles.detailRow}>
                   <PlatformIcon label={source.label} size={28} />
                   <Text style={styles.detailRowLabel}>{source.label}</Text>
-                  <Text style={styles.detailRowValue}>{formatNaira(source.amount)}</Text>
+                  <Text style={styles.detailRowValue}>
+                    {source.amountKobo === null ? '—' : formatNaira(source.amountKobo)}
+                  </Text>
                 </View>
               ))
             )}
@@ -254,36 +282,99 @@ function ReturnReviewContent() {
         </Pressable>
         {calcExpanded ? (
           <Card style={styles.detailCard}>
-            <View style={styles.calcRow}>
-              <Text style={styles.detailRowLabel}>Total income</Text>
-              <Text style={styles.detailRowValue}>{formatNaira(totalIncome)}</Text>
-            </View>
-            <View style={styles.calcRow}>
-              <Text style={styles.detailRowLabel}>Total deductions</Text>
-              <Text style={styles.detailRowValue}>{formatNaira(totalDeductions)}</Text>
-            </View>
-            <View style={[styles.calcRow, styles.calcRowStrong]}>
-              <Text style={styles.detailRowLabelStrong}>Taxable income</Text>
-              <Text style={styles.detailRowValueStrong}>{formatNaira(taxableIncome)}</Text>
-            </View>
-            <View style={styles.calcRow}>
-              <Text style={styles.detailRowLabel}>Estimated tax rate</Text>
-              <Text style={styles.detailRowValue}>{Math.round(MOCK_TAX_RATE * 100)}%</Text>
-            </View>
-            <View style={[styles.calcRow, styles.calcRowStrong]}>
-              <Text style={styles.detailRowLabelStrong}>Estimated tax due</Text>
-              <Text style={styles.detailRowValueStrong}>{formatNaira(estimatedTaxDue)}</Text>
-            </View>
-            {deductions.length > 0 ? (
-              <View style={styles.deductionsBreakdown}>
-                {deductions.map((d) => (
-                  <View key={d.id} style={styles.calcRow}>
-                    <Text style={styles.detailRowLabel}>{d.label}</Text>
-                    <Text style={styles.detailRowValue}>{formatNaira(d.amount)}</Text>
+            {!calc ? (
+              <Text style={styles.detailEmpty}>
+                We&apos;ll work out your tax once your income is entered.
+              </Text>
+            ) : (
+              <>
+                <View style={styles.calcRow}>
+                  <Text style={styles.detailRowLabel}>Total income</Text>
+                  <Text style={styles.detailRowValue}>{formatNaira(calc.grossIncomeKobo)}</Text>
+                </View>
+                {calc.businessExpensesKobo > 0 ? (
+                  <View style={styles.calcRow}>
+                    <Text style={styles.detailRowLabel}>Business expenses</Text>
+                    <Text style={styles.detailRowValue}>− {formatNaira(calc.businessExpensesKobo)}</Text>
+                  </View>
+                ) : null}
+                <View style={[styles.calcRow, styles.calcRowStrong]}>
+                  <Text style={styles.detailRowLabelStrong}>Income after expenses</Text>
+                  <Text style={styles.detailRowValueStrong}>
+                    {formatNaira(calc.incomeAfterExpensesKobo)}
+                  </Text>
+                </View>
+
+                <Text style={styles.calcSection}>Reliefs and deductions</Text>
+                {calc.reliefs.map((relief) => (
+                  <View key={relief.code} style={styles.reliefBlock}>
+                    <View style={styles.calcRow}>
+                      <Text style={styles.detailRowLabel}>{RELIEF_LABELS[relief.code] ?? relief.code}</Text>
+                      <Text
+                        style={[
+                          styles.detailRowValue,
+                          relief.status === 'not_applied' && styles.notAppliedValue,
+                        ]}
+                      >
+                        {relief.status === 'not_applied'
+                          ? 'Not applied'
+                          : `− ${formatNaira(relief.appliedKobo)}`}
+                      </Text>
+                    </View>
+                    {relief.status === 'not_applied' && relief.note ? (
+                      <Text style={styles.reliefNote}>{relief.note}</Text>
+                    ) : relief.claimedKobo !== null && relief.claimedKobo !== relief.appliedKobo ? (
+                      <Text style={styles.reliefNote}>
+                        {relief.note ? `${relief.note} ` : ''}You paid {formatNaira(relief.claimedKobo)}
+                        {relief.status === 'capped' ? '; capped.' : '.'}
+                      </Text>
+                    ) : relief.code === 'cra' && relief.note ? (
+                      <Text style={styles.reliefNote}>{relief.note}</Text>
+                    ) : null}
                   </View>
                 ))}
-              </View>
-            ) : null}
+                <View style={[styles.calcRow, styles.calcRowStrong]}>
+                  <Text style={styles.detailRowLabelStrong}>Taxable income</Text>
+                  <Text style={styles.detailRowValueStrong}>{formatNaira(calc.taxableIncomeKobo)}</Text>
+                </View>
+
+                <Text style={styles.calcSection}>Tax by band</Text>
+                {calc.bands
+                  .filter((band) => band.taxableKobo > 0)
+                  .map((band) => (
+                    <View key={band.fromKobo} style={styles.calcRow}>
+                      <Text style={styles.detailRowLabel}>
+                        {bandLabel(band, calc.bands.indexOf(band))}
+                      </Text>
+                      <Text style={styles.detailRowValue}>{formatNaira(band.taxKobo)}</Text>
+                    </View>
+                  ))}
+                {calc.taxableIncomeKobo === 0 ? (
+                  <Text style={styles.reliefNote}>No taxable income, so no tax from the bands.</Text>
+                ) : null}
+                {calc.minimumTaxKobo !== null ? (
+                  <View style={styles.reliefBlock}>
+                    <View style={styles.calcRow}>
+                      <Text style={styles.detailRowLabel}>Minimum tax (1% of gross income)</Text>
+                      <Text style={styles.detailRowValue}>{formatNaira(calc.minimumTaxKobo)}</Text>
+                    </View>
+                    <Text style={styles.reliefNote}>
+                      {calc.minimumTaxApplied
+                        ? 'Your tax from the bands is lower than the minimum tax, so the minimum tax applies.'
+                        : 'Your tax from the bands is higher, so the minimum tax doesn’t apply.'}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={[styles.calcRow, styles.calcRowStrong]}>
+                  <Text style={styles.detailRowLabelStrong}>Tax due</Text>
+                  <Text style={styles.detailRowValueStrong}>{formatNaira(calc.taxDueKobo)}</Text>
+                </View>
+                <Text style={styles.rulesNote}>
+                  {calc.rulesName ?? calc.rulesVersion} ({calc.rulesVersion}). Amounts are rounded to
+                  the nearest kobo at each step.
+                </Text>
+              </>
+            )}
           </Card>
         ) : null}
 
@@ -549,6 +640,32 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.primaryDark,
     flex: 1,
+  },
+  breakdownCard: {
+    marginBottom: spacing.md,
+  },
+  calcSection: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  reliefBlock: {
+    marginBottom: spacing.xs,
+  },
+  reliefNote: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  notAppliedValue: {
+    color: colors.textSecondary,
+  },
+  rulesNote: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
   },
   approveButton: {
     marginBottom: spacing.sm,

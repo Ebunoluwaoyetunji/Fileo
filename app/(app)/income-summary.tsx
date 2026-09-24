@@ -3,19 +3,24 @@
  * flagged-transactions review (each needs a category before continuing),
  * and a success bottom sheet once every flagged transaction is categorized.
  *
- * No transaction parsing exists, so income lines are mock: one per selected
- * platform/bank, all using the frame's own example amount (₦4,820,000).
- * The flagged transaction is likewise mock, matching the frame's example
- * (12 Mar 2025, ₦350,000) — but only appears when at least one Nigerian
- * bank was selected (flagged items conceptually come from parsing an
- * auto-pulled bank statement, not a manually-uploaded document the user
- * already labeled themselves). That also makes the zero-flagged-
- * transactions case reachable and testable: select only non-bank
- * platforms and this screen has nothing to flag.
+ * Income is real: each selected platform/bank has an amount field in naira
+ * (commas added as you type; stored as whole kobo), plus one optional
+ * "allowable business expenses" field. The user ticks "I confirm these
+ * amounts…" before continuing; that confirmation is saved with the figures
+ * and cleared by the server if they change later. Each amount records where
+ * it came from: 'manual' (typed) or 'ai' — an amount the server suggested
+ * from the uploaded statement (ai_suggested_kobo, next task) that the user
+ * accepted unchanged. A suggestion is pre-filled with a note to check it;
+ * editing it makes it 'manual'.
  *
- * ⚠️ The confirmed amounts are saved to the draft (as kobo) when the user
- * continues — they're these placeholder figures until real statement
- * parsing exists. An amount already saved for a platform is kept.
+ * The flagged transaction is still the frame's mock example (12 Mar,
+ * ₦350,000), shown only when a Nigerian bank was selected (flagged items
+ * conceptually come from parsing an auto-pulled bank statement).
+ *
+ * ⚠️ No Figma design for the amount fields, the expenses field, the
+ * confirmation checkbox, the AI-suggestion note or the validation errors —
+ * built from the existing TextField, checkbox (Select Bank) and caption
+ * styles.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
@@ -31,26 +36,24 @@ import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { TextField } from '../../components/ui/TextField';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { colors } from '../../constants/colors';
 import { isNigerianBank } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
+import { checkAmount, formatNaira, formatNairaInput, koboToInput, parseNairaInput } from '../../lib/money';
 import { useFiling } from '../../state/filingContext';
 
-const MOCK_INCOME_AMOUNT = 4820000;
 const CATEGORY_OPTIONS = ['Salary', 'Business', 'Investment', 'Other'];
 
 type FlaggedTransaction = {
   id: string;
   date: string;
+  /** Whole kobo. */
   amount: number;
   category: string | null;
 };
-
-function formatNaira(amount: number) {
-  return `₦${amount.toLocaleString('en-NG')}`;
-}
 
 export default function IncomeSummaryScreen() {
   return (
@@ -61,36 +64,125 @@ export default function IncomeSummaryScreen() {
 }
 
 function IncomeSummaryContent() {
-  const { selectedPlatforms, incomeSources, setIncomeSources, taxYear } = useFiling();
-  // Opened from Return Review's "Fix": highlight the source missing its amount.
-  const { focus } = useFixMode();
+  const {
+    draft,
+    selectedPlatforms,
+    incomeSources,
+    setIncomeSources,
+    businessExpensesKobo,
+    setBusinessExpensesKobo,
+    taxYear,
+  } = useFiling();
+  // Opened from Return Review's "Fix": highlight the source missing its
+  // amount (focus), or the confirmation (no focus).
+  const { isFixing, focus } = useFixMode();
   const { isSaving, error: saveError, saveAndContinue } = useSaveAndContinue(
     'deductions',
     '/(app)/deductions'
   );
+
+  const savedSource = (platform: string) => incomeSources.find((s) => s.label === platform);
+
+  // What's typed in each field. A platform with no amount yet but an AI
+  // suggestion starts with the suggestion.
+  const [inputs, setInputs] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      selectedPlatforms.map((platform) => {
+        const saved = savedSource(platform);
+        return [platform, koboToInput(saved?.amountKobo ?? saved?.aiSuggestedKobo ?? null)];
+      })
+    )
+  );
+  // Platforms whose field still holds the AI suggestion, unedited.
+  const [aiPrefilled, setAiPrefilled] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      selectedPlatforms.map((platform) => {
+        const saved = savedSource(platform);
+        const fromAi =
+          saved?.aiSuggestedKobo != null &&
+          (saved.amountKobo === null || (saved.amountSource === 'ai' && saved.amountKobo === saved.aiSuggestedKobo));
+        return [platform, fromAi];
+      })
+    )
+  );
+  const [expensesInput, setExpensesInput] = useState(() =>
+    businessExpensesKobo ? koboToInput(businessExpensesKobo) : ''
+  );
+  const [confirmed, setConfirmed] = useState(() => !!draft?.incomeConfirmedAt);
+  const [amountErrors, setAmountErrors] = useState<Record<string, string>>({});
+  const [expensesError, setExpensesError] = useState<string | undefined>();
+  const [confirmError, setConfirmError] = useState<string | undefined>();
 
   const [flaggedTransactions, setFlaggedTransactions] = useState<FlaggedTransaction[]>([]);
   const [flaggedInitialized, setFlaggedInitialized] = useState(false);
   const hasFlaggedTransactions = flaggedTransactions.length > 0;
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
 
-  // One income line per selected platform/bank: the amount already saved
-  // for it, or else the illustrative figure the Figma frame itself shows (no
-  // real document parsing exists yet).
+  // Keep the filing's working copy in step with the fields, so Continue
+  // saves exactly what's on screen.
   useEffect(() => {
-    const next = selectedPlatforms.map((platform) => ({
-      id: `income-${platform}`,
-      label: platform,
-      amount: incomeSources.find((s) => s.label === platform)?.amount ?? MOCK_INCOME_AMOUNT,
-    }));
-    const unchanged =
-      next.length === incomeSources.length &&
-      next.every((s, i) => s.label === incomeSources[i].label && s.amount === incomeSources[i].amount);
-    if (!unchanged) {
-      setIncomeSources(next);
-    }
+    setIncomeSources(
+      selectedPlatforms.map((platform) => {
+        const saved = savedSource(platform);
+        const kobo = parseNairaInput(inputs[platform] ?? '');
+        return {
+          id: `income-${platform}`,
+          label: platform,
+          amountKobo: kobo,
+          amountSource: kobo === null ? null : aiPrefilled[platform] ? 'ai' : 'manual',
+          aiSuggestedKobo: saved?.aiSuggestedKobo ?? null,
+        };
+      })
+    );
+    setBusinessExpensesKobo(parseNairaInput(expensesInput) ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPlatforms]);
+  }, [inputs, aiPrefilled, expensesInput, selectedPlatforms]);
+
+  const handleAmountChange = (platform: string, text: string) => {
+    setInputs((prev) => ({ ...prev, [platform]: formatNairaInput(text) }));
+    setAiPrefilled((prev) => ({ ...prev, [platform]: false }));
+    setAmountErrors((prev) => ({ ...prev, [platform]: '' }));
+    setConfirmed(false);
+  };
+
+  const handleExpensesChange = (text: string) => {
+    setExpensesInput(formatNairaInput(text));
+    setExpensesError(undefined);
+    setConfirmed(false);
+  };
+
+  const totalKobo = selectedPlatforms.reduce(
+    (sum, platform) => sum + (parseNairaInput(inputs[platform] ?? '') ?? 0),
+    0
+  );
+
+  /** All fields valid and confirmed? Shows every error at once. */
+  const validate = () => {
+    const errors: Record<string, string> = {};
+    let total = 0;
+    selectedPlatforms.forEach((platform) => {
+      const result = checkAmount(inputs[platform] ?? '', `Enter the income you received from ${platform}.`);
+      if (result.error !== null) {
+        errors[platform] = result.error;
+      } else {
+        total += result.kobo;
+      }
+    });
+    let expenses: string | undefined;
+    if (expensesInput.trim()) {
+      const result = checkAmount(expensesInput, '');
+      if (result.error !== null) {
+        expenses = result.error;
+      } else if (result.kobo > total) {
+        expenses = 'Business expenses can’t be more than your total income.';
+      }
+    }
+    const confirm = confirmed ? undefined : 'Tick the box to confirm your income is correct.';
+    setAmountErrors(errors);
+    setExpensesError(expenses);
+    setConfirmError(confirm);
+    return Object.keys(errors).length === 0 && !expenses && !confirm;
+  };
 
   // Same "wait for real data, then decide once" approach as above — a lazy
   // useState initializer would have frozen this at whatever
@@ -104,7 +196,7 @@ function IncomeSummaryContent() {
     setFlaggedInitialized(true);
     if (selectedPlatforms.some(isNigerianBank)) {
       setFlaggedTransactions([
-        { id: 'flagged-1', date: `12 Mar ${taxYear}`, amount: 350000, category: null },
+        { id: 'flagged-1', date: `12 Mar ${taxYear}`, amount: 35000000, category: null },
       ]);
     }
   }, [selectedPlatforms, flaggedInitialized]);
@@ -119,14 +211,14 @@ function IncomeSummaryContent() {
   };
 
   const handleCompleteReview = () => {
-    if (!allCategorized) {
+    if (!allCategorized || !validate()) {
       return;
     }
     setShowSuccessSheet(true);
   };
 
   const handleContinueFromSheet = async () => {
-    if (await saveAndContinue()) {
+    if (await saveAndContinue({ incomeConfirmed: true })) {
       setShowSuccessSheet(false);
     }
   };
@@ -137,8 +229,8 @@ function IncomeSummaryContent() {
       <FilingProgressBar step={3} />
       <Text style={styles.title}>Review your income</Text>
       <Text style={styles.subtitle}>
-        We&apos;ve organized your income and highlighted a few transactions that need your review
-        before we continue.
+        Enter what you received from each platform in {taxYear}, in naira, then confirm the
+        amounts.
       </Text>
 
       <ScrollView
@@ -148,23 +240,79 @@ function IncomeSummaryContent() {
       >
         <Text style={styles.sectionTitle}>Income Summary</Text>
         <Card style={styles.summaryCard}>
-          {incomeSources.map((source) => (
+          {selectedPlatforms.map((platform) => (
             <View
-              key={source.id}
-              style={[styles.summaryRow, focus === source.label && styles.summaryRowHighlighted]}
+              key={platform}
+              style={[styles.incomeRow, focus === platform && styles.summaryRowHighlighted]}
             >
-              <PlatformIcon label={source.label} size={32} />
-              <Text style={styles.summaryLabel}>{source.label}</Text>
-              <Text style={styles.summaryValue}>{formatNaira(source.amount)}</Text>
+              <View style={styles.summaryRow}>
+                <PlatformIcon label={platform} size={32} />
+                <Text style={styles.summaryLabel}>{platform}</Text>
+              </View>
+              {aiPrefilled[platform] ? (
+                <Text style={styles.aiNote}>
+                  Suggested from your statement. Check it before you confirm.
+                </Text>
+              ) : null}
+              <TextField
+                label={`Amount received in ${taxYear} (₦)`}
+                placeholder="0"
+                keyboardType="decimal-pad"
+                value={inputs[platform] ?? ''}
+                onChangeText={(text) => handleAmountChange(platform, text)}
+                errorMessage={amountErrors[platform] || undefined}
+                accessibilityLabel={`Income from ${platform} in naira`}
+              />
             </View>
           ))}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total income</Text>
+            <Text style={styles.summaryValue}>{formatNaira(totalKobo)}</Text>
+          </View>
           <View style={styles.infoNote}>
             <Ionicons name="information-circle-outline" size={16} color={colors.primaryDark} />
             <Text style={styles.infoNoteText}>
-              All amounts have been converted to naira using the CBN average exchange rate.
+              Convert foreign earnings to naira using the CBN average exchange rate.
             </Text>
           </View>
         </Card>
+
+        <TextField
+          label="Allowable business expenses (₦), optional"
+          placeholder="0"
+          keyboardType="decimal-pad"
+          value={expensesInput}
+          onChangeText={handleExpensesChange}
+          errorMessage={expensesError}
+          accessibilityLabel="Allowable business expenses in naira"
+        />
+        <Text style={styles.expensesHelp}>
+          Costs you paid only to earn this income, like data, equipment or platform fees. Leave
+          blank if none.
+        </Text>
+
+        <Pressable
+          onPress={() => {
+            setConfirmed((prev) => !prev);
+            setConfirmError(undefined);
+          }}
+          style={[
+            styles.confirmRow,
+            isFixing && !focus && !confirmed && styles.summaryRowHighlighted,
+          ]}
+          accessibilityRole="checkbox"
+          aria-checked={confirmed}
+        >
+          <Ionicons
+            name={confirmed ? 'checkbox' : 'square-outline'}
+            size={22}
+            color={confirmed ? colors.primary : colors.textSecondary}
+          />
+          <Text style={styles.confirmText}>
+            I confirm these amounts are correct and complete for {taxYear}.
+          </Text>
+        </Pressable>
+        {confirmError ? <Text style={styles.confirmError}>{confirmError}</Text> : null}
 
         {hasFlaggedTransactions ? (
           <>
@@ -266,6 +414,50 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     marginBottom: spacing.lg,
+  },
+  incomeRow: {
+    marginBottom: spacing.sm,
+  },
+  aiNote: {
+    ...typography.caption,
+    color: colors.primaryDark,
+    marginBottom: spacing.xs,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  totalLabel: {
+    ...typography.bodyStrong,
+    color: colors.textPrimary,
+  },
+  expensesHelp: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  confirmText: {
+    ...typography.body,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  confirmError: {
+    ...typography.caption,
+    color: colors.danger,
+    marginBottom: spacing.md,
   },
   summaryRowHighlighted: {
     backgroundColor: colors.warningLight,

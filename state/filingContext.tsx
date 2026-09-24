@@ -44,11 +44,6 @@ import {
 
 export type { Deduction, Filing, IncomeSource } from '../lib/filings';
 
-/** Flat, clearly-mock rate — NOT how Nigerian PIT actually works (it's
- * progressive/bracketed in reality). Display-only estimate on Return Review
- * and Home until tax calculation moves to the server; never stored. */
-export const MOCK_TAX_RATE = 0.15;
-
 /** A submitted return (anything past draft). */
 export type FilingHistoryEntry = Filing & { reference: string; submittedAt: string };
 
@@ -56,6 +51,7 @@ type WorkingCopy = {
   selectedPlatforms: string[];
   documentIdsByKey: Record<string, string>;
   incomeSources: IncomeSource[];
+  businessExpensesKobo: number;
   deductions: Deduction[];
 };
 
@@ -63,6 +59,7 @@ const EMPTY_WORKING_COPY: WorkingCopy = {
   selectedPlatforms: [],
   documentIdsByKey: {},
   incomeSources: [],
+  businessExpensesKobo: 0,
   deductions: [],
 };
 
@@ -74,6 +71,7 @@ function workingCopyFrom(filing: Filing | null): WorkingCopy {
     selectedPlatforms: filing.platforms,
     documentIdsByKey: filing.documentIdsByKey,
     incomeSources: filing.incomeSources,
+    businessExpensesKobo: filing.businessExpensesKobo,
     deductions: filing.deductions,
   };
 }
@@ -103,15 +101,20 @@ type FilingContextValue = WorkingCopy & {
   /** Empties any slot holding this document (after it's been deleted). */
   forgetDocument: (documentId: string) => void;
   setIncomeSources: (sources: IncomeSource[]) => void;
+  setBusinessExpensesKobo: (kobo: number) => void;
   setDeductions: (deductions: Deduction[]) => void;
-  totalIncome: number;
-  totalDeductions: number;
+  /** Sum of entered income, whole kobo. */
+  totalIncomeKobo: number;
 
   /** Resumes the draft (or creates one for the current tax year) and says
    * where to go: its saved step, or the File tab if this year is filed. */
   startFiling: () => Promise<{ route: Href; error: null } | { route: null; error: FilingError }>;
-  /** Saves the working copy and the step to resume at. */
-  saveProgress: (nextStep: FilingStep) => Promise<{ error: FilingError | null }>;
+  /** Saves the working copy and the step to resume at. `incomeConfirmed`:
+   * the user has just confirmed their income figures (Income Summary). */
+  saveProgress: (
+    nextStep: FilingStep,
+    options?: { incomeConfirmed?: boolean }
+  ) => Promise<{ error: FilingError | null }>;
   /** Submits the draft; the server checks it and returns the reference. */
   submit: () => Promise<
     { reference: string; submittedAt: string; error: null } | { reference: null; submittedAt: null; error: FilingError }
@@ -191,17 +194,19 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   }, [draft, filingHistory, reload]);
 
   const saveProgress = useCallback<FilingContextValue['saveProgress']>(
-    async (nextStep) => {
+    async (nextStep, options) => {
       if (!draft) {
         return { error: { code: 'not_draft', message: 'There’s no return in progress.' } };
       }
-      const incomeByPlatform: Record<string, number> = {};
+      const income: Record<string, { amountKobo: number | null; amountSource: IncomeSource['amountSource'] }> = {};
       working.incomeSources.forEach((s) => {
-        incomeByPlatform[s.label] = s.amount;
+        income[s.label] = { amountKobo: s.amountKobo, amountSource: s.amountSource };
       });
       const { error } = await saveFilingProgress(draft.id, nextStep, {
         platforms: working.selectedPlatforms,
-        incomeByPlatform,
+        income,
+        businessExpensesKobo: working.businessExpensesKobo,
+        incomeConfirmed: options?.incomeConfirmed,
         deductions: working.deductions,
         documents: working.documentIdsByKey,
       });
@@ -211,18 +216,21 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         }
         return { error };
       }
-      const confirmed = working.incomeSources.filter((s) =>
+      const sources = working.incomeSources.filter((s) =>
         working.selectedPlatforms.includes(s.label)
       );
+      // The server recalculates the tax on every save; screens that show it
+      // (Return Review) re-read the draft when they open.
       setDraft({
         ...draft,
         currentStep: nextStep,
         platforms: working.selectedPlatforms,
-        incomeSources: confirmed,
+        incomeSources: sources,
+        businessExpensesKobo: working.businessExpensesKobo,
+        incomeConfirmedAt: options?.incomeConfirmed ? new Date().toISOString() : draft.incomeConfirmedAt,
         deductions: working.deductions,
         documentIdsByKey: { ...draft.documentIdsByKey, ...working.documentIdsByKey },
-        totalIncome: confirmed.reduce((sum, s) => sum + s.amount, 0),
-        totalDeductions: working.deductions.reduce((sum, d) => sum + d.amount, 0),
+        totalIncomeKobo: sources.reduce((sum, s) => sum + (s.amountKobo ?? 0), 0),
         updatedAt: new Date().toISOString(),
       });
       return { error: null };
@@ -274,8 +282,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   }, [draft, reload]);
 
   const value = useMemo<FilingContextValue>(() => {
-    const totalIncome = working.incomeSources.reduce((sum, item) => sum + item.amount, 0);
-    const totalDeductions = working.deductions.reduce((sum, item) => sum + item.amount, 0);
+    const totalIncomeKobo = working.incomeSources.reduce((sum, item) => sum + (item.amountKobo ?? 0), 0);
     return {
       ...working,
       isLoading,
@@ -298,9 +305,10 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       addUploadedDocument,
       forgetDocument,
       setIncomeSources: (incomeSources) => setWorking((prev) => ({ ...prev, incomeSources })),
+      setBusinessExpensesKobo: (businessExpensesKobo) =>
+        setWorking((prev) => ({ ...prev, businessExpensesKobo })),
       setDeductions: (deductions) => setWorking((prev) => ({ ...prev, deductions })),
-      totalIncome,
-      totalDeductions,
+      totalIncomeKobo,
       startFiling,
       saveProgress,
       submit,

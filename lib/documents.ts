@@ -69,7 +69,8 @@ export type DocumentErrorCode =
   | 'wrong_type'
   | 'network'
   | 'session_missing'
-  | 'failed';
+  | 'failed'
+  | 'locked';
 
 export type DocumentError = { code: DocumentErrorCode; message: string };
 
@@ -79,6 +80,7 @@ export const DOCUMENT_ERROR_MESSAGES: Record<DocumentErrorCode, string> = {
   network: 'No connection. Check your internet and try again.',
   session_missing: 'Your session has expired. Please sign in again.',
   failed: 'Upload failed. Please try again.',
+  locked: 'This document is part of a submitted return, so it can’t be deleted.',
 };
 
 const docError = (code: DocumentErrorCode): DocumentError => ({
@@ -369,11 +371,41 @@ export async function deleteDocument(
   if (removeError) {
     return { error: docError(isNetworkError(removeError) ? 'network' : 'failed') };
   }
-  const { error: rowError } = await supabase.from('documents').delete().eq('id', document.id);
+  const { data: deleted, error: rowError } = await supabase
+    .from('documents')
+    .delete()
+    .eq('id', document.id)
+    .select('id');
   if (rowError) {
     return { error: docError(isNetworkError(rowError) ? 'network' : 'failed') };
   }
+  if (!deleted || deleted.length === 0) {
+    // Nothing deleted: either already gone (fine), or the database refused
+    // because the document is part of a submitted return (then the storage
+    // rules kept the file too).
+    const { data: still } = await supabase.from('documents').select('id').eq('id', document.id).maybeSingle();
+    if (still) {
+      return { error: docError('locked') };
+    }
+  }
   return { error: null };
+}
+
+/** The tax year of the submitted return this document is part of, if any —
+ * such documents can't be deleted (enforced by the database and storage). */
+export async function getDocumentLock(documentId: string): Promise<{ taxYear: number } | null> {
+  const { data, error } = await supabase
+    .from('filing_documents')
+    .select('filings!inner(tax_year, status)')
+    .eq('document_id', documentId)
+    .neq('filings.status', 'draft')
+    .limit(1);
+  if (error || !data || data.length === 0) {
+    return null;
+  }
+  const filing = (data[0] as unknown as { filings: { tax_year: number } | { tax_year: number }[] }).filings;
+  const taxYear = Array.isArray(filing) ? filing[0]?.tax_year : filing?.tax_year;
+  return taxYear ? { taxYear } : null;
 }
 
 /** Deletes a document by id (used when a replaced file's row isn't loaded). */

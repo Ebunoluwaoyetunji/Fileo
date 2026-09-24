@@ -47,19 +47,80 @@ export function currentTaxYear(now: Date = new Date()): number {
   return now.getFullYear() - 1;
 }
 
+/** Where an income amount came from: typed by the user, or an AI suggestion
+ * from their statement that they accepted. */
+export type AmountSource = 'manual' | 'ai';
+
 export type IncomeSource = {
   id: string;
   label: string;
-  /** Naira. */
-  amount: number;
+  /** Whole kobo; null until entered. */
+  amountKobo: number | null;
+  amountSource: AmountSource | null;
+  /** An AI-suggested amount from the uploaded statement (server-written). */
+  aiSuggestedKobo: number | null;
 };
 
 export type Deduction = {
   id: string;
   label: string;
-  /** Naira. */
-  amount: number;
+  /** What the user paid (rent, contributions, premiums), whole kobo; null
+   * until entered. The tax rules decide how much of it is allowed. */
+  amountPaidKobo: number | null;
 };
+
+export type ReliefLine = {
+  /** 'cra', 'pension', 'nhf', 'life_assurance' or 'rent'. */
+  code: string;
+  claimedKobo: number | null;
+  appliedKobo: number;
+  status: 'applied' | 'capped' | 'not_applied';
+  /** Plain-English note from the rules, e.g. why it wasn't applied. */
+  note: string | null;
+};
+
+export type TaxBand = {
+  fromKobo: number;
+  widthKobo: number | null;
+  rateBp: number;
+  taxableKobo: number;
+  taxKobo: number;
+};
+
+/** The server's calculation (filing_tax_calculations). Display only. */
+export type TaxCalculation = {
+  rulesVersion: string;
+  rulesName: string | null;
+  taxYear: number;
+  grossIncomeKobo: number;
+  businessExpensesKobo: number;
+  incomeAfterExpensesKobo: number;
+  reliefs: ReliefLine[];
+  totalReliefsKobo: number;
+  taxableIncomeKobo: number;
+  bands: TaxBand[];
+  bandTaxKobo: number;
+  minimumTaxKobo: number | null;
+  minimumTaxApplied: boolean;
+  taxDueKobo: number;
+  /** Tax on the same income with none of the user's deductions. */
+  taxWithoutDeductionsKobo: number;
+  calculatedAt: string;
+  isFinal: boolean;
+};
+
+/** How each relief line from the server reads. */
+export const RELIEF_LABELS: Record<string, string> = {
+  cra: 'Consolidated relief allowance',
+  pension: 'Pension contributions',
+  nhf: 'National Housing Fund (NHF)',
+  life_assurance: 'Life assurance premium',
+  rent: 'Rent relief',
+};
+
+/** What the user's deductions saved, per the server's figures. */
+export const taxSavedKobo = (calc: TaxCalculation) =>
+  Math.max(calc.taxWithoutDeductionsKobo - calc.taxDueKobo, 0);
 
 export type Filing = {
   id: string;
@@ -72,14 +133,17 @@ export type Filing = {
   submittedAt: string | null;
   /** Selected platforms / banks, in the order chosen. */
   platforms: string[];
-  /** Only the sources whose amount has been confirmed. */
+  /** One per selected platform (amount null until entered). */
   incomeSources: IncomeSource[];
+  businessExpensesKobo: number;
+  incomeConfirmedAt: string | null;
   deductions: Deduction[];
   /** App slot key (platform name, or deductionDocumentKey(type)) -> document id.
    * Empty slots (e.g. the document was deleted) are left out. */
   documentIdsByKey: Record<string, string>;
-  totalIncome: number;
-  totalDeductions: number;
+  /** Sum of entered income, whole kobo. */
+  totalIncomeKobo: number;
+  taxCalculation: TaxCalculation | null;
 };
 
 export type FilingErrorCode =
@@ -97,6 +161,8 @@ export type MissingItem =
   | { type: 'income_sources' }
   | { type: 'income_amount'; platform: string }
   | { type: 'platform_document'; platform: string }
+  | { type: 'income_unconfirmed' }
+  | { type: 'deduction_amount'; deduction_type: string }
   | { type: 'deduction_document'; deduction_type: string }
   | { type: 'review' };
 
@@ -127,8 +193,63 @@ const toSlot = (key: string) => (key.startsWith('deduction:') ? key : `platform:
 const fromSlot = (slot: string) =>
   slot.startsWith('platform:') ? slot.slice('platform:'.length) : slot;
 
-export const nairaToKobo = (naira: number) => Math.round(naira * 100);
-export const koboToNaira = (kobo: number) => kobo / 100;
+type CalcRow = {
+  tax_year: number;
+  rules_version: string;
+  gross_income_kobo: number;
+  business_expenses_kobo: number;
+  income_after_expenses_kobo: number;
+  reliefs: { code: string; claimed_kobo: number | null; applied_kobo: number; status: ReliefLine['status']; note: string | null }[];
+  total_reliefs_kobo: number;
+  taxable_income_kobo: number;
+  bands: { from_kobo: number; width_kobo: number | null; rate_bp: number; taxable_kobo: number; tax_kobo: number }[];
+  band_tax_kobo: number;
+  minimum_tax_kobo: number | null;
+  minimum_tax_applied: boolean;
+  tax_due_kobo: number;
+  tax_without_deductions_kobo: number;
+  calculated_at: string;
+  is_final: boolean;
+  tax_rule_sets?: { name: string } | null;
+};
+
+function toCalculation(row: CalcRow | CalcRow[] | null | undefined): TaxCalculation | null {
+  const c = Array.isArray(row) ? row[0] : row;
+  if (!c) {
+    return null;
+  }
+  return {
+    rulesVersion: c.rules_version,
+    rulesName: c.tax_rule_sets?.name ?? null,
+    taxYear: c.tax_year,
+    grossIncomeKobo: Number(c.gross_income_kobo),
+    businessExpensesKobo: Number(c.business_expenses_kobo),
+    incomeAfterExpensesKobo: Number(c.income_after_expenses_kobo),
+    reliefs: (c.reliefs ?? []).map((r) => ({
+      code: r.code,
+      claimedKobo: r.claimed_kobo === null ? null : Number(r.claimed_kobo),
+      appliedKobo: Number(r.applied_kobo),
+      status: r.status,
+      note: r.note ?? null,
+    })),
+    totalReliefsKobo: Number(c.total_reliefs_kobo),
+    taxableIncomeKobo: Number(c.taxable_income_kobo),
+    bands: (c.bands ?? []).map((b) => ({
+      fromKobo: Number(b.from_kobo),
+      widthKobo: b.width_kobo === null ? null : Number(b.width_kobo),
+      rateBp: Number(b.rate_bp),
+      taxableKobo: Number(b.taxable_kobo),
+      taxKobo: Number(b.tax_kobo),
+    })),
+    bandTaxKobo: Number(c.band_tax_kobo),
+    minimumTaxKobo: c.minimum_tax_kobo === null ? null : Number(c.minimum_tax_kobo),
+    minimumTaxApplied: c.minimum_tax_applied,
+    taxDueKobo: Number(c.tax_due_kobo),
+    taxWithoutDeductionsKobo: Number(c.tax_without_deductions_kobo),
+    calculatedAt: c.calculated_at,
+    isFinal: c.is_final,
+  };
+}
 
 type FilingRow = {
   id: string;
@@ -139,26 +260,41 @@ type FilingRow = {
   created_at: string;
   updated_at: string;
   submitted_at: string | null;
-  filing_income_sources: { platform: string; amount_kobo: number | null; position: number }[];
-  filing_deductions: { deduction_type: string; amount_kobo: number }[];
+  business_expenses_kobo: number;
+  income_confirmed_at: string | null;
+  filing_income_sources: {
+    platform: string;
+    amount_kobo: number | null;
+    amount_source: AmountSource | null;
+    ai_suggested_kobo: number | null;
+    position: number;
+  }[];
+  filing_deductions: { deduction_type: string; amount_paid_kobo: number | null }[];
   filing_documents: { slot: string; document_id: string | null }[];
+  filing_tax_calculations: CalcRow | CalcRow[] | null;
 };
 
 const FILING_SELECT =
   'id, tax_year, status, current_step, reference, created_at, updated_at, submitted_at, ' +
-  'filing_income_sources(platform, amount_kobo, position), ' +
-  'filing_deductions(deduction_type, amount_kobo), ' +
-  'filing_documents(slot, document_id)';
+  'business_expenses_kobo, income_confirmed_at, ' +
+  'filing_income_sources(platform, amount_kobo, amount_source, ai_suggested_kobo, position), ' +
+  'filing_deductions(deduction_type, amount_paid_kobo), ' +
+  'filing_documents(slot, document_id), ' +
+  'filing_tax_calculations(*, tax_rule_sets(name))';
 
 function toFiling(row: FilingRow): Filing {
   const sources = [...(row.filing_income_sources ?? [])].sort((a, b) => a.position - b.position);
-  const incomeSources = sources
-    .filter((s) => s.amount_kobo !== null)
-    .map((s) => ({ id: `income-${s.platform}`, label: s.platform, amount: koboToNaira(s.amount_kobo as number) }));
-  const deductions = (row.filing_deductions ?? []).map((d) => ({
+  const incomeSources: IncomeSource[] = sources.map((s) => ({
+    id: `income-${s.platform}`,
+    label: s.platform,
+    amountKobo: s.amount_kobo === null ? null : Number(s.amount_kobo),
+    amountSource: s.amount_source,
+    aiSuggestedKobo: s.ai_suggested_kobo === null ? null : Number(s.ai_suggested_kobo),
+  }));
+  const deductions: Deduction[] = (row.filing_deductions ?? []).map((d) => ({
     id: d.deduction_type,
     label: DEDUCTION_DEFINITIONS.find((def) => def.id === d.deduction_type)?.label ?? d.deduction_type,
-    amount: koboToNaira(d.amount_kobo),
+    amountPaidKobo: d.amount_paid_kobo === null ? null : Number(d.amount_paid_kobo),
   }));
   const documentIdsByKey: Record<string, string> = {};
   (row.filing_documents ?? []).forEach((d) => {
@@ -177,10 +313,12 @@ function toFiling(row: FilingRow): Filing {
     submittedAt: row.submitted_at,
     platforms: sources.map((s) => s.platform),
     incomeSources,
+    businessExpensesKobo: Number(row.business_expenses_kobo ?? 0),
+    incomeConfirmedAt: row.income_confirmed_at,
     deductions,
     documentIdsByKey,
-    totalIncome: incomeSources.reduce((sum, s) => sum + s.amount, 0),
-    totalDeductions: deductions.reduce((sum, d) => sum + d.amount, 0),
+    totalIncomeKobo: incomeSources.reduce((sum, s) => sum + (s.amountKobo ?? 0), 0),
+    taxCalculation: toCalculation(row.filing_tax_calculations),
   };
 }
 
@@ -256,8 +394,11 @@ export async function getOrCreateDraft(
 
 export type ProgressUpdate = {
   platforms?: string[];
-  /** Naira, by platform. Platforms without a confirmed amount are saved empty. */
-  incomeByPlatform?: Record<string, number>;
+  /** By platform. Platforms without an entry are saved with no amount. */
+  income?: Record<string, { amountKobo: number | null; amountSource: AmountSource | null }>;
+  businessExpensesKobo?: number;
+  /** The user has just confirmed their income figures. */
+  incomeConfirmed?: boolean;
   deductions?: Deduction[];
   /** App slot key -> document id (null empties the slot). */
   documents?: Record<string, string | null>;
@@ -274,12 +415,18 @@ export async function saveFilingProgress(
     p_current_step: currentStep,
     p_income_sources: update.platforms
       ? update.platforms.map((platform) => {
-          const naira = update.incomeByPlatform?.[platform];
-          return { platform, amount_kobo: naira === undefined ? null : nairaToKobo(naira) };
+          const entry = update.income?.[platform];
+          return {
+            platform,
+            amount_kobo: entry?.amountKobo ?? null,
+            amount_source: entry?.amountKobo === null || !entry ? null : entry.amountSource,
+          };
         })
       : null,
+    p_business_expenses_kobo: update.businessExpensesKobo ?? null,
+    p_income_confirmed: update.incomeConfirmed ?? null,
     p_deductions: update.deductions
-      ? update.deductions.map((d) => ({ deduction_type: d.id, amount_kobo: nairaToKobo(d.amount) }))
+      ? update.deductions.map((d) => ({ deduction_type: d.id, amount_paid_kobo: d.amountPaidKobo }))
       : null,
     p_documents: update.documents
       ? Object.entries(update.documents).map(([key, documentId]) => ({
@@ -395,6 +542,21 @@ export function describeMissingItem(item: MissingItem): MissingItemDetails {
           category: platformDocumentCategory(item.platform),
         },
       };
+    case 'income_unconfirmed':
+      return {
+        id: 'income_unconfirmed',
+        label: 'Income amounts not confirmed',
+        step: 'income_summary',
+      };
+    case 'deduction_amount': {
+      const definition = DEDUCTION_DEFINITIONS.find((d) => d.id === item.deduction_type);
+      return {
+        id: `deduction_amount:${item.deduction_type}`,
+        label: `Amount missing for ${definition?.label ?? 'a deduction'}`,
+        step: 'deductions',
+        focus: item.deduction_type,
+      };
+    }
     case 'deduction_document': {
       const definition = DEDUCTION_DEFINITIONS.find((d) => d.id === item.deduction_type);
       const name = capitalize(definition?.documentLabel ?? 'Deduction document');
@@ -414,6 +576,37 @@ export function describeMissingItem(item: MissingItem): MissingItemDetails {
     default:
       return { id: 'review', label: 'Deductions not confirmed yet', step: 'deductions' };
   }
+}
+
+export type ReliefRule = { allowed: boolean; reason?: string; note?: string };
+
+/** Which deductions a tax year allows (the server's rules table), e.g. rent
+ * relief only from 2026. Null if it couldn't be loaded. */
+export async function getTaxRules(
+  taxYear: number
+): Promise<{ version: string; name: string; reliefs: Record<string, ReliefRule> } | null> {
+  const { data, error } = await supabase
+    .from('tax_rule_sets')
+    .select('version, name, params, tax_year_from, tax_year_to')
+    .lte('tax_year_from', taxYear)
+    .order('tax_year_from', { ascending: false });
+  if (error || !data) {
+    return null;
+  }
+  const rules = (data as { version: string; name: string; params: { reliefs?: Record<string, ReliefRule> }; tax_year_to: number | null }[])
+    .find((r) => r.tax_year_to === null || r.tax_year_to >= taxYear);
+  return rules ? { version: rules.version, name: rules.name, reliefs: rules.params.reliefs ?? {} } : null;
+}
+
+/** Deductions the tax rules actually applied (excluding the automatic
+ * consolidated relief), or — with no calculation — what was claimed. */
+export function deductionsTotalKobo(filing: Filing): number {
+  if (filing.taxCalculation) {
+    return filing.taxCalculation.reliefs
+      .filter((r) => r.code !== 'cra')
+      .reduce((sum, r) => sum + r.appliedKobo, 0);
+  }
+  return filing.deductions.reduce((sum, d) => sum + (d.amountPaidKobo ?? 0), 0);
 }
 
 /** How a status reads to the user. */

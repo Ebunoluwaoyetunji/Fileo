@@ -42,8 +42,10 @@ import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { isNigerianBank } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
+import { formatNaira } from '../../lib/money';
 import {
   currentTaxYear,
+  deductionsTotalKobo,
   describeMissingItem,
   Filing,
   MissingItem,
@@ -51,10 +53,6 @@ import {
   stepIndex,
 } from '../../lib/filings';
 import { FilingHistoryEntry, useFiling } from '../../state/filingContext';
-
-function formatNaira(amount: number) {
-  return `₦${amount.toLocaleString('en-NG')}`;
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
@@ -112,7 +110,9 @@ function InProgressState({ draft }: { draft: Filing }) {
       draft.platforms.filter((p) => !isNigerianBank(p)).every((p) => !!draft.documentIdsByKey[p]);
   const incomeDone =
     stepIndex(draft.currentStep) > stepIndex('income_summary') &&
-    (missingItems ? !has('income_amount') : draft.incomeSources.length === draft.platforms.length);
+    (missingItems
+      ? !has('income_amount') && !has('income_unconfirmed')
+      : !!draft.incomeConfirmedAt && draft.incomeSources.every((s) => s.amountKobo !== null));
   const deductionsDone = draft.currentStep === 'return_review';
 
   const steps = [
@@ -310,12 +310,12 @@ function HistoryCard({ entry }: { entry: FilingHistoryEntry }) {
             <View style={styles.summaryRow}>
               <View style={styles.summaryColumn}>
                 <Text style={styles.summaryLabel}>Total income</Text>
-                <Text style={styles.summaryValue}>{formatNaira(entry.totalIncome)}</Text>
+                <Text style={styles.summaryValue}>{formatNaira(entry.totalIncomeKobo)}</Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryColumn}>
                 <Text style={styles.summaryLabel}>Total deductions</Text>
-                <Text style={styles.summaryValue}>{formatNaira(entry.totalDeductions)}</Text>
+                <Text style={styles.summaryValue}>{formatNaira(deductionsTotalKobo(entry))}</Text>
               </View>
             </View>
             <View style={styles.pendingNote}>
