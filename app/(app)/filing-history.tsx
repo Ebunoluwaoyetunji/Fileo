@@ -14,8 +14,8 @@
  *    any past filings below it (history and in-progress show together).
  *    "Continue filing" opens the draft at its saved step. "Documents still
  *    needed" is the server's own list of empty document slots (platform
- *    statements and deduction documents — auto-pulled banks never need
- *    one), and each "Upload" is a real upload that fills that slot.
+ *    statements, banks included, and deduction documents), and each
+ *    "Upload" is a real upload that fills that slot.
  *  - history (no draft, past filings): the list of submitted returns, each
  *    tapping through to filing-detail.tsx. "Start {year} filing" only shows
  *    while the current tax year hasn't been filed yet.
@@ -40,7 +40,6 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
-import { isNigerianBank } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { formatNaira } from '../../lib/money';
 import {
@@ -107,7 +106,7 @@ function InProgressState({ draft }: { draft: Filing }) {
   const documentsDone = missingItems
     ? platformsDone && !has('platform_document')
     : platformsDone &&
-      draft.platforms.filter((p) => !isNigerianBank(p)).every((p) => !!draft.documentIdsByKey[p]);
+      draft.platforms.every((p) => !!draft.documentIdsByKey[p]);
   const incomeDone =
     stepIndex(draft.currentStep) > stepIndex('income_summary') &&
     (missingItems

@@ -15,7 +15,7 @@ import { RequireDraft } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { AUTO_PULL_MESSAGE, NIGERIAN_BANKS } from '../../constants/platforms';
+import { BANK_STATEMENT_MESSAGE, NIGERIAN_BANKS } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -71,7 +71,7 @@ function SelectBankContent() {
                   color={isSelected ? colors.primary : colors.textSecondary}
                 />
               </View>
-              {isSelected ? <Text style={styles.autoPullText}>{AUTO_PULL_MESSAGE}</Text> : null}
+              {isSelected ? <Text style={styles.autoPullText}>{BANK_STATEMENT_MESSAGE}</Text> : null}
             </Pressable>
           );
         }}

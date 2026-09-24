@@ -18,7 +18,7 @@ import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { colors } from '../../constants/colors';
-import { AUTO_PULL_MESSAGE, isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
+import { BANK_STATEMENT_MESSAGE, isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -104,7 +104,7 @@ function SelectPlatformContent() {
                   <Text style={styles.autoPullNoteLabel}>
                     {selectedBanks.join(', ')}
                   </Text>
-                  <Text style={styles.autoPullNoteText}>{AUTO_PULL_MESSAGE}</Text>
+                  <Text style={styles.autoPullNoteText}>{BANK_STATEMENT_MESSAGE}</Text>
                 </View>
               ) : null}
             </View>

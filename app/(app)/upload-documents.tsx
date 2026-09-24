@@ -1,16 +1,22 @@
 /**
- * Upload Documents — from the Figma frame: Nigerian bank accounts show as
- * "automatically pulled" with mock summary stats, everything else needs a
- * manual upload. The frame's own example groups a Nigerian fintech
- * (Paystack) and a content platform (YouTube) together under "International
- * platforms" — so that heading is really just "needs a manual upload",
- * reproduced as-is rather than split by category.
+ * Upload Documents — from the Figma frame. The frame's own example groups a
+ * Nigerian fintech (Paystack) and a content platform (YouTube) together
+ * under "International platforms" — so that heading is really just "needs a
+ * manual upload", reproduced as-is rather than split by category.
+ *
+ * The frame also showed Nigerian bank accounts as "automatically pulled",
+ * with made-up summary figures. Automatic bank connections don't exist yet,
+ * so banks now appear under "Bank accounts" and need their statement
+ * uploaded like everything else (Fileo can read it), with a note that
+ * automatic connection is coming soon. No figures are shown or saved for a
+ * bank that the user hasn't uploaded or entered themselves.
  *
  * "Upload" / "Upload manually" pick a real file (or photo) and save it to
  * the user's account (lib/documents: private storage + a documents row).
  * The document is filed under the filing's tax year and linked to that
- * platform's slot in the draft right away; "Change" uploads a replacement
- * and only then deletes the old file. Continue saves the step.
+ * platform's slot in the draft right away; a bank's "Change" uploads a
+ * replacement and only then deletes the old file. Continue saves the step
+ * once every platform has its statement.
  *
  * Uploaded statements are then read by AI in the background (if the user
  * allowed it; the consent screen opens here the first time): each card
@@ -50,14 +56,10 @@ import { deleteDocumentById } from '../../lib/documents';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
-// Mock auto-pull summary — same illustrative numbers for every bank,
-// matching the Figma frame's example exactly.
-const MOCK_PULL_SUMMARY = {
-  transactions: '143 transactions',
-  inflows: '₦4,820,000',
-};
-
 function manualUploadDescription(platform: string): string {
+  if (isNigerianBank(platform)) {
+    return 'Account statement for the year';
+  }
   const contentPlatforms = ['YouTube', 'TikTok', 'Substack', 'Patreon', 'Instagram'];
   return contentPlatforms.includes(platform)
     ? 'Earnings statement or payment report'
@@ -103,12 +105,11 @@ function UploadDocumentsContent() {
 
   const bankPlatforms = selectedPlatforms.filter(isNigerianBank);
   const manualPlatforms = selectedPlatforms.filter((platform) => !isNigerianBank(platform));
-  const pendingManualPlatforms = manualPlatforms.filter((p) => !uploadedDocuments.includes(p));
+  const pendingPlatforms = selectedPlatforms.filter((p) => !uploadedDocuments.includes(p));
 
-  const allCovered = pendingManualPlatforms.length === 0;
+  // Every platform, banks included, needs its statement.
+  const allCovered = pendingPlatforms.length === 0;
 
-  // Auto-pull banks land here too: auto-pull is informational, not a block
-  // on a manual upload the user chooses to do anyway (e.g. as a fallback).
   const handleUpload = (platform: string) => {
     uploader.start({
       key: platform,
@@ -149,6 +150,75 @@ function UploadDocumentsContent() {
     });
   };
 
+  // One card per platform: Upload, then "Uploaded" with the statement's
+  // reading status. Banks keep a "Change" link to replace their statement.
+  const renderUploadCard = (platform: string) => {
+    const isUploaded = uploadedDocuments.includes(platform);
+    const uploadState = uploader.slot(platform);
+    const isHighlighted = focus === platform && !isUploaded;
+    return (
+      <View
+        key={platform}
+        onLayout={
+          focus === platform
+            ? (event) => {
+                focusCardY.current = event.nativeEvent.layout.y;
+                scrollToFocus();
+              }
+            : undefined
+        }
+      >
+        <Card style={[styles.uploadCard, isHighlighted && styles.uploadCardHighlighted]}>
+          {isUploaded ? (
+            <>
+              <View style={styles.uploadedRow}>
+                <PlatformIcon label={platform} size={36} />
+                <View style={styles.uploadedTextWrap}>
+                  <Text style={styles.bankName}>{platform}</Text>
+                  <Text style={styles.pulledLabel}>Uploaded</Text>
+                </View>
+                {isNigerianBank(platform) ? (
+                  <Pressable
+                    onPress={() => handleChangeManualUpload(platform)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Change ${platform} statement`}
+                  >
+                    <Text style={styles.changeLink}>Change</Text>
+                  </Pressable>
+                ) : (
+                  <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                )}
+              </View>
+              {uploadState.status === 'uploading' ? <UploadingRow /> : null}
+              <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(platform)} />
+              <View style={styles.readingStatus}>
+                <StatementReadingStatus documentId={documentIdsByKey[platform]} />
+              </View>
+            </>
+          ) : (
+            <>
+              <Ionicons name="cloud-upload-outline" size={32} color={colors.textSecondary} />
+              <Text style={styles.uploadPlatformName}>{platform}</Text>
+              <Text style={styles.uploadDescription}>{manualUploadDescription(platform)}</Text>
+              <Button
+                label="Upload"
+                variant="dark"
+                onPress={() => handleUpload(platform)}
+                loading={uploadState.status === 'uploading'}
+                style={styles.uploadButton}
+              />
+              <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(platform)} />
+              {isHighlighted && uploadState.status !== 'error' ? (
+                <Text style={styles.highlightNote}>Needed to submit your return.</Text>
+              ) : null}
+            </>
+          )}
+        </Card>
+      </View>
+    );
+  };
+
   // Mock: no email is sent, and nothing is marked as uploaded.
   const handleSendEmailLink = () => {
     setShowEmailToast(true);
@@ -160,8 +230,8 @@ function UploadDocumentsContent() {
       <FilingProgressBar step={2} />
       <Text style={styles.title}>Upload your tax documents</Text>
       <Text style={styles.subtitle}>
-        We&apos;ve automatically pulled data where we can. For international platforms, upload
-        your annual statement.
+        Upload a statement for each account and platform you were paid through. We can read
+        it and suggest your income.
       </Text>
 
       <ScrollView
@@ -170,149 +240,48 @@ function UploadDocumentsContent() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {bankPlatforms.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nigerian accounts — auto pulled</Text>
-            {bankPlatforms.map((bank) => {
-              const isManuallyUploaded = uploadedDocuments.includes(bank);
-              const uploadState = uploader.slot(bank);
-              return (
-                <Card key={bank} style={styles.bankCard}>
-                  <View style={styles.bankHeader}>
-                    <PlatformIcon label={bank} size={36} />
-                    <Text style={styles.bankName}>{bank}</Text>
-                    <Text style={styles.pulledLabel}>Automatically pulled</Text>
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            manualSectionY.current = event.nativeEvent.layout.y;
+            scrollToFocus();
+          }}
+        >
+          {bankPlatforms.length > 0 ? (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Bank accounts</Text>
+                {bankPlatforms.some((p) => !uploadedDocuments.includes(p)) ? (
+                  <View style={styles.requiredBadge}>
+                    <Text style={styles.requiredBadgeText}>Upload required</Text>
                   </View>
-                  <View style={styles.pullSummary}>
-                    <View style={styles.pullRow}>
-                      <Text style={styles.pullLabel}>Period covered</Text>
-                      <Text style={styles.pullValue}>Jan – Dec {taxYear}</Text>
-                    </View>
-                    <View style={styles.pullRow}>
-                      <Text style={styles.pullLabel}>Transactions found</Text>
-                      <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.transactions}</Text>
-                    </View>
-                    <View style={styles.pullRow}>
-                      <Text style={styles.pullLabel}>Total inflows</Text>
-                      <Text style={styles.pullValue}>{MOCK_PULL_SUMMARY.inflows}</Text>
-                    </View>
-                  </View>
-                  {/* Auto-pull is informational — it doesn't stand in the way
-                      of a manual upload the user wants to do anyway (e.g. as
-                      a fallback if auto-pull is wrong or incomplete). Once
-                      done, this switches to a plain confirmation + "Change"
-                      the same way deductions.tsx confirms a document. */}
-                  {uploadState.status === 'uploading' ? (
-                    <UploadingRow />
-                  ) : isManuallyUploaded ? (
-                    <View style={styles.manualUploadConfirmRow}>
-                      <View style={styles.manualUploadConfirmLeft}>
-                        <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                        <Text style={styles.manualUploadConfirmText}>
-                          Document uploaded manually
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() => handleChangeManualUpload(bank)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                      >
-                        <Text style={styles.changeLink}>Change</Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <Button
-                      label="Upload manually"
-                      variant="secondary"
-                      onPress={() => handleUpload(bank)}
-                    />
-                  )}
-                  <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(bank)} />
-                  {isManuallyUploaded ? (
-                    <StatementReadingStatus documentId={documentIdsByKey[bank]} />
-                  ) : null}
-                </Card>
-              );
-            })}
-          </View>
-        ) : null}
+                ) : null}
+              </View>
+              <View style={styles.comingSoonRow}>
+                <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+                <Text style={styles.comingSoonText}>
+                  Automatic bank connection is coming soon. For now, upload a statement for each
+                  account.
+                </Text>
+              </View>
+              {bankPlatforms.map(renderUploadCard)}
+            </>
+          ) : null}
 
-        {manualPlatforms.length > 0 ? (
-          <View
-            style={styles.section}
-            onLayout={(event) => {
-              manualSectionY.current = event.nativeEvent.layout.y;
-              scrollToFocus();
-            }}
-          >
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>International platforms</Text>
-              {pendingManualPlatforms.length > 0 ? (
-                <View style={styles.requiredBadge}>
-                  <Text style={styles.requiredBadgeText}>Upload required</Text>
-                </View>
-              ) : null}
-            </View>
-            {manualPlatforms.map((platform) => {
-              const isUploaded = uploadedDocuments.includes(platform);
-              const uploadState = uploader.slot(platform);
-              const isHighlighted = focus === platform && !isUploaded;
-              return (
-                <View
-                  key={platform}
-                  onLayout={
-                    focus === platform
-                      ? (event) => {
-                          focusCardY.current = event.nativeEvent.layout.y;
-                          scrollToFocus();
-                        }
-                      : undefined
-                  }
-                >
-                  <Card style={[styles.uploadCard, isHighlighted && styles.uploadCardHighlighted]}>
-                    {isUploaded ? (
-                      <View style={styles.uploadedRow}>
-                        <PlatformIcon label={platform} size={36} />
-                        <View style={styles.uploadedTextWrap}>
-                          <Text style={styles.bankName}>{platform}</Text>
-                          <Text style={styles.pulledLabel}>Uploaded</Text>
-                        </View>
-                        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-                      </View>
-                    ) : null}
-                    {isUploaded ? (
-                      <View style={styles.readingStatus}>
-                        <StatementReadingStatus documentId={documentIdsByKey[platform]} />
-                      </View>
-                    ) : (
-                      <>
-                        <Ionicons name="cloud-upload-outline" size={32} color={colors.textSecondary} />
-                        <Text style={styles.uploadPlatformName}>{platform}</Text>
-                        <Text style={styles.uploadDescription}>
-                          {manualUploadDescription(platform)}
-                        </Text>
-                        <Button
-                          label="Upload"
-                          variant="dark"
-                          onPress={() => handleUpload(platform)}
-                          loading={uploadState.status === 'uploading'}
-                          style={styles.uploadButton}
-                        />
-                        <UploadErrorRow
-                          state={uploadState}
-                          onRetry={() => uploader.retry(platform)}
-                        />
-                        {isHighlighted && uploadState.status !== 'error' ? (
-                          <Text style={styles.highlightNote}>Needed to submit your return.</Text>
-                        ) : null}
-                      </>
-                    )}
-                  </Card>
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
+          {manualPlatforms.length > 0 ? (
+            <>
+              <View style={[styles.sectionHeaderRow, bankPlatforms.length > 0 && styles.subsectionGap]}>
+                <Text style={styles.sectionTitle}>International platforms</Text>
+                {manualPlatforms.some((p) => !uploadedDocuments.includes(p)) ? (
+                  <View style={styles.requiredBadge}>
+                    <Text style={styles.requiredBadgeText}>Upload required</Text>
+                  </View>
+                ) : null}
+              </View>
+              {manualPlatforms.map(renderUploadCard)}
+            </>
+          ) : null}
+        </View>
       </ScrollView>
 
       <Button
@@ -347,6 +316,20 @@ function UploadDocumentsContent() {
 }
 
 const styles = StyleSheet.create({
+  comingSoonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  comingSoonText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  subsectionGap: {
+    marginTop: spacing.md,
+  },
   readingStatus: {
     alignSelf: 'stretch',
     marginTop: spacing.sm,
@@ -397,56 +380,12 @@ const styles = StyleSheet.create({
     color: colors.warning,
     fontWeight: '600',
   },
-  bankCard: {
-    marginBottom: spacing.sm,
-  },
-  bankHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
   bankName: {
     ...typography.bodyStrong,
     color: colors.textPrimary,
     flex: 1,
   },
   pulledLabel: {
-    ...typography.caption,
-    color: colors.success,
-    fontWeight: '600',
-  },
-  pullSummary: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.xs,
-  },
-  pullRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  pullLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  pullValue: {
-    ...typography.caption,
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  manualUploadConfirmRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  manualUploadConfirmLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  manualUploadConfirmText: {
     ...typography.caption,
     color: colors.success,
     fontWeight: '600',

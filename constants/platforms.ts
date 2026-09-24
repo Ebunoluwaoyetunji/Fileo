@@ -46,11 +46,11 @@ export function isNigerianBank(name: string): boolean {
   return NIGERIAN_BANKS.includes(name);
 }
 
-/** Shown inline under a selected bank — the only entries Upload Documents
- * treats as auto-pullable (isNigerianBank), so the message is scoped to
- * match: it doesn't appear on Nigerian fintech tiles like Paystack, which
- * the Upload Documents frame itself shows needing a manual upload. */
-export const AUTO_PULL_MESSAGE = 'FILEO can automatically pull income data from this account.';
+/** Shown inline under a selected bank. Automatic bank connections don't
+ * exist yet, so a bank works like any other income source: the user uploads
+ * its statement (which Fileo can read for them) and confirms the amount. */
+export const BANK_STATEMENT_MESSAGE =
+  'Upload a statement for this account. Automatic bank connection is coming soon.';
 
 const NIGERIAN_FINTECHS =
   PLATFORM_CATEGORIES.find((category) => category.title === 'Nigerian fintechs')?.platforms ?? [];

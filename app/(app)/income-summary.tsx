@@ -20,7 +20,9 @@
  * Flagged transactions are the real ones the AI wasn't sure about: each
  * shows its date, amount and description, and the user answers Income or
  * not (own transfer, refund, loan, reversal, other). Answers are saved
- * straight away and the server recalculates the suggestion.
+ * straight away and the server recalculates the suggestion. They're only
+ * asked for (and only block Continue) where the AI's amount is being used;
+ * a platform with a typed ('manual') amount gets a one-line note instead.
  *
  * ⚠️ No Figma design for the amount fields, the expenses field, the
  * confirmation checkbox, the AI-suggestion note, the reading / warning /
@@ -161,8 +163,14 @@ function IncomeSummaryContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suggestionKey]);
 
-  // Transactions the AI wasn't sure about, per platform statement.
-  const flaggedGroups = selectedPlatforms
+  // Transactions the AI wasn't sure about, per platform statement. They
+  // only need answers where the AI's amount is being used: once the user
+  // types their own amount ('manual'), that platform's answers wouldn't
+  // change anything, so they're not asked for (same rule as the server's
+  // "what's missing" list).
+  const isManualAmount = (platform: string) =>
+    !aiPrefilled[platform] && (inputs[platform] ?? '').trim() !== '';
+  const allFlaggedGroups = selectedPlatforms
     .map((platform) => ({
       platform,
       documentId: documentIdsByKey[platform],
@@ -172,6 +180,10 @@ function IncomeSummaryContent() {
       (group): group is { platform: string; documentId: string; extraction: Extraction } =>
         !!group.documentId && group.extraction?.status === 'done' && group.extraction.flagged.length > 0
     );
+  const flaggedGroups = allFlaggedGroups.filter((group) => !isManualAmount(group.platform));
+  const skippedFlaggedPlatforms = allFlaggedGroups
+    .filter((group) => isManualAmount(group.platform))
+    .map((group) => group.platform);
   const hasFlaggedTransactions = flaggedGroups.length > 0;
 
   const handleDecision = async (documentId: string, transactionId: string, decision: TransactionDecision) => {
@@ -337,6 +349,13 @@ function IncomeSummaryContent() {
           blank if none.
         </Text>
 
+        {skippedFlaggedPlatforms.length > 0 ? (
+          <Text style={styles.flaggedSkipped}>
+            You entered your own amount for {skippedFlaggedPlatforms.join(' and ')}, so you don’t
+            need to review the transactions we flagged in{' '}
+            {skippedFlaggedPlatforms.length === 1 ? 'that statement' : 'those statements'}.
+          </Text>
+        ) : null}
 
         {hasFlaggedTransactions ? (
           <>
@@ -491,6 +510,11 @@ const styles = StyleSheet.create({
   },
   readingStatus: {
     marginBottom: spacing.xs,
+  },
+  flaggedSkipped: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   flaggedSource: {
     ...typography.caption,
