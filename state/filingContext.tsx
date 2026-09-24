@@ -32,6 +32,7 @@ import {
   Filing,
   FilingError,
   FilingStep,
+  getFiling,
   getOrCreateDraft,
   IncomeSource,
   linkFilingDocument,
@@ -82,6 +83,10 @@ type FilingContextValue = WorkingCopy & {
   isLoading: boolean;
   loadError: string | null;
   reload: () => Promise<void>;
+  /** Re-reads the draft from the server and resets the working copy to it
+   * (e.g. on Return Review, where everything has already been saved, so it
+   * reflects changes made on another device or by deleting a document). */
+  refreshDraft: () => Promise<void>;
   draft: Filing | null;
   filingHistory: FilingHistoryEntry[];
   /** The draft's tax year, or the year a new filing would be for. */
@@ -152,6 +157,18 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const draftId = draft?.id;
+  const refreshDraft = useCallback(async () => {
+    if (!draftId) {
+      return;
+    }
+    const result = await getFiling(draftId);
+    if (result.filing && result.filing.status === 'draft') {
+      setDraft(result.filing);
+      setWorking(workingCopyFrom(result.filing));
+    }
+  }, [draftId]);
 
   const taxYear = draft?.taxYear ?? currentTaxYear();
   const hasFiledCurrentYear = filingHistory.some((f) => f.taxYear === currentTaxYear());
@@ -264,6 +281,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       isLoading,
       loadError,
       reload,
+      refreshDraft,
       draft,
       filingHistory,
       taxYear,
@@ -292,6 +310,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
     isLoading,
     loadError,
     reload,
+    refreshDraft,
     draft,
     filingHistory,
     taxYear,

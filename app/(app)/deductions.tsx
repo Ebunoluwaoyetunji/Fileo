@@ -38,9 +38,14 @@
  *     somewhere — flagged to the user rather than inventing a figure.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
+import {
+  RequireDraft,
+  SaveErrorNote,
+  useFixMode,
+  useSaveAndContinue,
+} from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
@@ -80,6 +85,11 @@ function DeductionsContent() {
     taxYear,
   } = useFiling();
   const uploader = useDocumentUploader();
+  // Opened from Return Review's "Fix": scroll to that deduction and show its
+  // missing-document error straight away.
+  const { focus } = useFixMode();
+  const scrollRef = useRef<ScrollView>(null);
+  const hasScrolled = useRef(false);
   const { isSaving, error: saveError, saveAndContinue } = useSaveAndContinue(
     'return_review',
     '/(app)/return-review'
@@ -156,6 +166,7 @@ function DeductionsContent() {
     <Screen>
       <BackButton />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -174,77 +185,94 @@ function DeductionsContent() {
           const isUploaded = uploadedDocuments.includes(documentKey(deduction.id));
           const uploadState = uploader.slot(documentKey(deduction.id));
           const isUploading = uploadState.status === 'uploading';
-          const showError = hasAttemptedContinue && isEnabled && !isUploaded && !isUploading;
+          const showError =
+            (hasAttemptedContinue || focus === deduction.id) && isEnabled && !isUploaded && !isUploading;
 
           return (
-            <Card
+            <View
               key={deduction.id}
-              style={[styles.deductionCard, isEnabled && styles.deductionCardSelected]}
+              onLayout={
+                focus === deduction.id
+                  ? (event) => {
+                      if (!hasScrolled.current) {
+                        hasScrolled.current = true;
+                        scrollRef.current?.scrollTo({
+                          y: Math.max(0, event.nativeEvent.layout.y - spacing.md),
+                          animated: true,
+                        });
+                      }
+                    }
+                  : undefined
+              }
             >
-              <View style={styles.deductionHeader}>
-                <Text style={styles.deductionTitle}>{deduction.label}</Text>
-                <Switch
-                  value={isEnabled}
-                  onValueChange={() => toggleDeduction(deduction.id)}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor={colors.background}
-                />
-              </View>
-              <Text style={styles.deductionDescription}>
-                {deductionDescription(deduction, taxYear)}
-              </Text>
+              <Card
+                style={[styles.deductionCard, isEnabled && styles.deductionCardSelected]}
+              >
+                <View style={styles.deductionHeader}>
+                  <Text style={styles.deductionTitle}>{deduction.label}</Text>
+                  <Switch
+                    value={isEnabled}
+                    onValueChange={() => toggleDeduction(deduction.id)}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.background}
+                  />
+                </View>
+                <Text style={styles.deductionDescription}>
+                  {deductionDescription(deduction, taxYear)}
+                </Text>
 
-              {isEnabled ? (
-                isUploading ? (
-                  <View style={styles.uploadingWrap}>
-                    <UploadingRow />
-                  </View>
-                ) : isUploaded ? (
-                  <View style={styles.uploadedRow}>
-                    <View style={styles.uploadedLeft}>
-                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                      <Text style={styles.uploadedText}>Document uploaded</Text>
+                {isEnabled ? (
+                  isUploading ? (
+                    <View style={styles.uploadingWrap}>
+                      <UploadingRow />
                     </View>
-                    <Pressable
-                      onPress={() => handleUploadDocument(deduction.id)}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                    >
-                      <Text style={styles.changeLink}>Change</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <>
-                    <Pressable
-                      onPress={() => handleUploadDocument(deduction.id)}
-                      style={[styles.uploadPrompt, showError && styles.uploadPromptError]}
-                    >
-                      <Ionicons
-                        name="cloud-upload-outline"
-                        size={20}
-                        color={showError ? colors.danger : colors.textSecondary}
-                      />
-                      <Text
-                        style={[styles.uploadPromptText, showError && styles.uploadPromptTextError]}
+                  ) : isUploaded ? (
+                    <View style={styles.uploadedRow}>
+                      <View style={styles.uploadedLeft}>
+                        <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                        <Text style={styles.uploadedText}>Document uploaded</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => handleUploadDocument(deduction.id)}
+                        hitSlop={8}
+                        accessibilityRole="button"
                       >
-                        Upload your {deduction.documentLabel}
-                      </Text>
-                    </Pressable>
-                    {showError ? (
-                      <Text style={styles.errorText}>
-                        Upload your {deduction.documentLabel} to continue.
-                      </Text>
-                    ) : null}
-                  </>
-                )
-              ) : null}
-              {isEnabled ? (
-                <UploadErrorRow
-                  state={uploadState}
-                  onRetry={() => uploader.retry(documentKey(deduction.id))}
-                />
-              ) : null}
-            </Card>
+                        <Text style={styles.changeLink}>Change</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <>
+                      <Pressable
+                        onPress={() => handleUploadDocument(deduction.id)}
+                        style={[styles.uploadPrompt, showError && styles.uploadPromptError]}
+                      >
+                        <Ionicons
+                          name="cloud-upload-outline"
+                          size={20}
+                          color={showError ? colors.danger : colors.textSecondary}
+                        />
+                        <Text
+                          style={[styles.uploadPromptText, showError && styles.uploadPromptTextError]}
+                        >
+                          Upload your {deduction.documentLabel}
+                        </Text>
+                      </Pressable>
+                      {showError ? (
+                        <Text style={styles.errorText}>
+                          Upload your {deduction.documentLabel} to continue.
+                        </Text>
+                      ) : null}
+                    </>
+                  )
+                ) : null}
+                {isEnabled ? (
+                  <UploadErrorRow
+                    state={uploadState}
+                    onRetry={() => uploader.retry(documentKey(deduction.id))}
+                  />
+                ) : null}
+              </Card>
+            </View>
           );
         })}
       </ScrollView>

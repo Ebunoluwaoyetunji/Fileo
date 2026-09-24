@@ -12,10 +12,10 @@
  *  - in-progress (a draft exists): a resume screen — the 5-step checklist
  *    and the documents still needed, from what's saved on the draft, plus
  *    any past filings below it (history and in-progress show together).
- *    "Continue filing" opens the draft at its saved step. A still-needed
- *    deduction document's "Upload" is a real upload (same sheet as
- *    Deductions) that fills that slot. Bank statements aren't listed:
- *    Upload Documents treats a selected bank as auto-pulled.
+ *    "Continue filing" opens the draft at its saved step. "Documents still
+ *    needed" is the server's own list of empty document slots (platform
+ *    statements and deduction documents — auto-pulled banks never need
+ *    one), and each "Upload" is a real upload that fills that slot.
  *  - history (no draft, past filings): the list of submitted returns, each
  *    tapping through to filing-detail.tsx. "Start {year} filing" only shows
  *    while the current tax year hasn't been filed yet.
@@ -33,17 +33,23 @@ import {
   UploadingRow,
   useDocumentUploader,
 } from '../../components/documents/useDocumentUploader';
-import { useStartFiling } from '../../components/filing/FilingFlow';
+import { useMissingItems, useStartFiling } from '../../components/filing/FilingFlow';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
-import { DEDUCTION_DEFINITIONS, deductionDocumentKey } from '../../constants/deductions';
 import { isNigerianBank } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
-import { currentTaxYear, Filing, STATUS_LABELS, stepIndex } from '../../lib/filings';
+import {
+  currentTaxYear,
+  describeMissingItem,
+  Filing,
+  MissingItem,
+  STATUS_LABELS,
+  stepIndex,
+} from '../../lib/filings';
 import { FilingHistoryEntry, useFiling } from '../../state/filingContext';
 
 function formatNaira(amount: number) {
@@ -52,10 +58,6 @@ function formatNaira(amount: number) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function capitalize(text: string) {
-  return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Personal income tax returns are due by 31 March of the following year. */
@@ -96,14 +98,21 @@ function InProgressState({ draft }: { draft: Filing }) {
   const uploader = useDocumentUploader();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // The checklist reflects what's saved on the draft.
+  // Completeness comes from the server's own rules (the same ones submit
+  // checks); until that answer arrives, the checklist falls back to what's
+  // saved on the draft.
+  const { items: missingItems, recheck } = useMissingItems(draft.id);
+  const missing = (missingItems ?? []).map(describeMissingItem);
+  const has = (type: MissingItem['type']) => (missingItems ?? []).some((item) => item.type === type);
+
   const platformsDone = draft.platforms.length > 0;
-  const documentsDone =
-    platformsDone &&
-    draft.platforms.filter((p) => !isNigerianBank(p)).every((p) => !!draft.documentIdsByKey[p]);
+  const documentsDone = missingItems
+    ? platformsDone && !has('platform_document')
+    : platformsDone &&
+      draft.platforms.filter((p) => !isNigerianBank(p)).every((p) => !!draft.documentIdsByKey[p]);
   const incomeDone =
     stepIndex(draft.currentStep) > stepIndex('income_summary') &&
-    draft.incomeSources.length === draft.platforms.length;
+    (missingItems ? !has('income_amount') : draft.incomeSources.length === draft.platforms.length);
   const deductionsDone = draft.currentStep === 'return_review';
 
   const steps = [
@@ -116,16 +125,10 @@ function InProgressState({ draft }: { draft: Filing }) {
   const completedCount = steps.filter((s) => s.complete).length;
   const percent = Math.round((completedCount / steps.length) * 100);
 
-  const neededDocuments = draft.deductions
-    .filter((d) => !draft.documentIdsByKey[deductionDocumentKey(d.id)])
-    .map((d) => {
-      const definition = DEDUCTION_DEFINITIONS.find((x) => x.id === d.id);
-      return {
-        key: deductionDocumentKey(d.id),
-        label: capitalize(definition?.documentLabel ?? d.label),
-        category: definition?.documentCategory ?? 'other',
-      };
-    });
+  // Every missing document — platform statements and deduction documents.
+  const neededDocuments = missing.flatMap((item) =>
+    item.document ? [{ ...item.document, isPlatform: item.id.startsWith('platform:') }] : []
+  );
 
   const subtitle =
     neededDocuments.length > 0
@@ -136,17 +139,18 @@ function InProgressState({ draft }: { draft: Filing }) {
 
   const handleUpload = (doc: (typeof neededDocuments)[number]) => {
     uploader.start({
-      key: doc.key,
-      source: 'deductions',
+      key: doc.slotKey,
+      source: doc.isPlatform ? 'upload_step' : 'deductions',
       category: doc.category,
       taxYear: draft.taxYear,
       onUploaded: async (document) => {
-        const { error } = await addUploadedDocument(doc.key, document.id);
+        const { error } = await addUploadedDocument(doc.slotKey, document.id);
         setToastMessage(
           error
             ? 'Document uploaded, but we couldn’t add it to your return. Open your return and tap Continue to try again.'
             : 'Document uploaded.'
         );
+        recheck();
       },
     });
   };
@@ -179,12 +183,12 @@ function InProgressState({ draft }: { draft: Filing }) {
           <>
             <Text style={styles.sectionTitle}>Documents still needed</Text>
             {neededDocuments.map((doc) => {
-              const uploadState = uploader.slot(doc.key);
+              const uploadState = uploader.slot(doc.slotKey);
               return (
-                <Card key={doc.key} style={styles.neededDocCardWrap}>
+                <Card key={doc.slotKey} style={styles.neededDocCardWrap}>
                   <View style={styles.neededDocRow}>
                     <View style={styles.neededDocLeft}>
-                      <Text style={styles.neededDocLabel}>{doc.label}</Text>
+                      <Text style={styles.neededDocLabel}>{doc.name}</Text>
                       <Pressable
                         onPress={() =>
                           setToastMessage(
@@ -207,7 +211,7 @@ function InProgressState({ draft }: { draft: Filing }) {
                       </Pressable>
                     )}
                   </View>
-                  <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(doc.key)} />
+                  <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(doc.slotKey)} />
                 </Card>
               );
             })}

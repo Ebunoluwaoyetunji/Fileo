@@ -17,9 +17,14 @@
  * submitting needs the real documents.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
+import {
+  RequireDraft,
+  SaveErrorNote,
+  useFixMode,
+  useSaveAndContinue,
+} from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
@@ -33,8 +38,8 @@ import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
-import { isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
-import { DocumentCategory, deleteDocumentById } from '../../lib/documents';
+import { isNigerianBank, platformDocumentCategory } from '../../constants/platforms';
+import { deleteDocumentById } from '../../lib/documents';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -50,17 +55,6 @@ function manualUploadDescription(platform: string): string {
   return contentPlatforms.includes(platform)
     ? 'Earnings statement or payment report'
     : 'Transaction report or income statement';
-}
-
-const NIGERIAN_FINTECHS =
-  PLATFORM_CATEGORIES.find((category) => category.title === 'Nigerian fintechs')?.platforms ?? [];
-
-/** Bank and Nigerian fintech statements are filed as bank statements;
- * everything else (international platforms, creator earnings) as other. */
-function documentCategoryFor(platform: string): DocumentCategory {
-  return isNigerianBank(platform) || NIGERIAN_FINTECHS.includes(platform)
-    ? 'bank_statement'
-    : 'other';
 }
 
 export default function UploadDocumentsScreen() {
@@ -79,6 +73,23 @@ function UploadDocumentsContent() {
     '/(app)/income-summary'
   );
   const uploader = useDocumentUploader();
+  // Opened from Return Review's "Fix": outline that platform's card and
+  // scroll to it.
+  const { focus } = useFixMode();
+  const scrollRef = useRef<ScrollView>(null);
+  const manualSectionY = useRef<number | null>(null);
+  const focusCardY = useRef<number | null>(null);
+  const hasScrolled = useRef(false);
+  const scrollToFocus = () => {
+    if (hasScrolled.current || manualSectionY.current === null || focusCardY.current === null) {
+      return;
+    }
+    hasScrolled.current = true;
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, manualSectionY.current + focusCardY.current - spacing.md),
+      animated: true,
+    });
+  };
   const [showEmailToast, setShowEmailToast] = useState(false);
   const [uploadToast, setUploadToast] = useState<string | null>(null);
 
@@ -94,7 +105,7 @@ function UploadDocumentsContent() {
     uploader.start({
       key: platform,
       source: 'upload_step',
-      category: documentCategoryFor(platform),
+      category: platformDocumentCategory(platform),
       taxYear,
       onUploaded: (document) => {
         addUploadedDocument(platform, document.id);
@@ -111,7 +122,7 @@ function UploadDocumentsContent() {
     uploader.start({
       key: platform,
       source: 'upload_step',
-      category: documentCategoryFor(platform),
+      category: platformDocumentCategory(platform),
       taxYear,
       onUploaded: async (document) => {
         // Point the slot at the new file before the old one goes.
@@ -146,6 +157,7 @@ function UploadDocumentsContent() {
       </Text>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -215,7 +227,13 @@ function UploadDocumentsContent() {
         ) : null}
 
         {manualPlatforms.length > 0 ? (
-          <View style={styles.section}>
+          <View
+            style={styles.section}
+            onLayout={(event) => {
+              manualSectionY.current = event.nativeEvent.layout.y;
+              scrollToFocus();
+            }}
+          >
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>International platforms</Text>
               {pendingManualPlatforms.length > 0 ? (
@@ -227,38 +245,54 @@ function UploadDocumentsContent() {
             {manualPlatforms.map((platform) => {
               const isUploaded = uploadedDocuments.includes(platform);
               const uploadState = uploader.slot(platform);
+              const isHighlighted = focus === platform && !isUploaded;
               return (
-                <Card key={platform} style={styles.uploadCard}>
-                  {isUploaded ? (
-                    <View style={styles.uploadedRow}>
-                      <PlatformIcon label={platform} size={36} />
-                      <View style={styles.uploadedTextWrap}>
-                        <Text style={styles.bankName}>{platform}</Text>
-                        <Text style={styles.pulledLabel}>Uploaded</Text>
+                <View
+                  key={platform}
+                  onLayout={
+                    focus === platform
+                      ? (event) => {
+                          focusCardY.current = event.nativeEvent.layout.y;
+                          scrollToFocus();
+                        }
+                      : undefined
+                  }
+                >
+                  <Card style={[styles.uploadCard, isHighlighted && styles.uploadCardHighlighted]}>
+                    {isUploaded ? (
+                      <View style={styles.uploadedRow}>
+                        <PlatformIcon label={platform} size={36} />
+                        <View style={styles.uploadedTextWrap}>
+                          <Text style={styles.bankName}>{platform}</Text>
+                          <Text style={styles.pulledLabel}>Uploaded</Text>
+                        </View>
+                        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
                       </View>
-                      <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-                    </View>
-                  ) : (
-                    <>
-                      <Ionicons name="cloud-upload-outline" size={32} color={colors.textSecondary} />
-                      <Text style={styles.uploadPlatformName}>{platform}</Text>
-                      <Text style={styles.uploadDescription}>
-                        {manualUploadDescription(platform)}
-                      </Text>
-                      <Button
-                        label="Upload"
-                        variant="dark"
-                        onPress={() => handleUpload(platform)}
-                        loading={uploadState.status === 'uploading'}
-                        style={styles.uploadButton}
-                      />
-                      <UploadErrorRow
-                        state={uploadState}
-                        onRetry={() => uploader.retry(platform)}
-                      />
-                    </>
-                  )}
-                </Card>
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload-outline" size={32} color={colors.textSecondary} />
+                        <Text style={styles.uploadPlatformName}>{platform}</Text>
+                        <Text style={styles.uploadDescription}>
+                          {manualUploadDescription(platform)}
+                        </Text>
+                        <Button
+                          label="Upload"
+                          variant="dark"
+                          onPress={() => handleUpload(platform)}
+                          loading={uploadState.status === 'uploading'}
+                          style={styles.uploadButton}
+                        />
+                        <UploadErrorRow
+                          state={uploadState}
+                          onRetry={() => uploader.retry(platform)}
+                        />
+                        {isHighlighted && uploadState.status !== 'error' ? (
+                          <Text style={styles.highlightNote}>Needed to submit your return.</Text>
+                        ) : null}
+                      </>
+                    )}
+                  </Card>
+                </View>
               );
             })}
           </View>
@@ -408,6 +442,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
+  },
+  uploadCardHighlighted: {
+    borderStyle: 'solid',
+    borderWidth: 2,
+    borderColor: colors.danger,
+  },
+  highlightNote: {
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.sm,
   },
   uploadPlatformName: {
     ...typography.bodyStrong,

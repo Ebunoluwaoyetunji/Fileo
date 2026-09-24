@@ -51,3 +51,18 @@ export function isNigerianBank(name: string): boolean {
  * match: it doesn't appear on Nigerian fintech tiles like Paystack, which
  * the Upload Documents frame itself shows needing a manual upload. */
 export const AUTO_PULL_MESSAGE = 'FILEO can automatically pull income data from this account.';
+
+const NIGERIAN_FINTECHS =
+  PLATFORM_CATEGORIES.find((category) => category.title === 'Nigerian fintechs')?.platforms ?? [];
+
+/** How a platform's uploaded statement is filed in Documents: bank and
+ * Nigerian fintech statements as bank statements, everything else (other
+ * platforms, creator earnings) as other. */
+export function platformDocumentCategory(platform: string): 'bank_statement' | 'other' {
+  return isNigerianBank(platform) || NIGERIAN_FINTECHS.includes(platform) ? 'bank_statement' : 'other';
+}
+
+/** What a platform's document is called, e.g. "Paystack statement". */
+export function platformDocumentLabel(platform: string): string {
+  return `${platform} statement`;
+}

@@ -7,6 +7,8 @@
  */
 import type { Href } from 'expo-router';
 import { DEDUCTION_DEFINITIONS } from '../constants/deductions';
+import { platformDocumentCategory, platformDocumentLabel } from '../constants/platforms';
+import type { DocumentCategory } from './documents';
 import { supabase } from './supabase';
 
 export type FilingStatus = 'draft' | 'submitted' | 'processing' | 'completed' | 'rejected';
@@ -88,7 +90,17 @@ export type FilingErrorCode =
   | 'not_found'
   | 'failed';
 
-export type FilingError = { code: FilingErrorCode; message: string; missing?: string[] };
+/** One thing still missing before a draft can be submitted — the server's
+ * own list (get_filing_missing_items / submit_filing), so the app and the
+ * server never disagree about what "complete" means. */
+export type MissingItem =
+  | { type: 'income_sources' }
+  | { type: 'income_amount'; platform: string }
+  | { type: 'platform_document'; platform: string }
+  | { type: 'deduction_document'; deduction_type: string }
+  | { type: 'review' };
+
+export type FilingError = { code: FilingErrorCode; message: string; missingItems?: MissingItem[] };
 
 const MESSAGES: Record<FilingErrorCode, string> = {
   network: 'Couldn’t save. Check your connection and try again.',
@@ -99,10 +111,10 @@ const MESSAGES: Record<FilingErrorCode, string> = {
   failed: 'Something went wrong. Please try again.',
 };
 
-const filingError = (code: FilingErrorCode, missing?: string[]): FilingError => ({
+const filingError = (code: FilingErrorCode, missingItems?: MissingItem[]): FilingError => ({
   code,
   message: MESSAGES[code],
-  ...(missing ? { missing } : {}),
+  ...(missingItems ? { missingItems } : {}),
 });
 
 function isNetworkError(error: unknown): boolean {
@@ -314,14 +326,94 @@ export async function submitFiling(
             : isNetworkError(error)
               ? 'network'
               : 'failed';
-    const missing = code === 'incomplete' && error.details ? error.details.split(',') : undefined;
-    return { reference: null, submittedAt: null, error: filingError(code, missing) };
+    const missingItems = code === 'incomplete' ? parseMissingItems(error.details) : undefined;
+    return { reference: null, submittedAt: null, error: filingError(code, missingItems) };
   }
   const row = (Array.isArray(data) ? data[0] : data) as { reference: string; submitted_at: string } | null;
   if (!row?.reference) {
     return { reference: null, submittedAt: null, error: filingError('failed') };
   }
   return { reference: row.reference, submittedAt: row.submitted_at, error: null };
+}
+
+function parseMissingItems(details: string | null | undefined): MissingItem[] {
+  try {
+    const parsed = JSON.parse(details ?? '[]');
+    return Array.isArray(parsed) ? (parsed as MissingItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** What's still missing from the draft, from the server's own rules. */
+export async function getMissingItems(
+  filingId: string
+): Promise<{ items: MissingItem[]; error: null } | { items: null; error: FilingError }> {
+  const { data, error } = await supabase.rpc('get_filing_missing_items', { p_filing_id: filingId });
+  if (error) {
+    return { items: null, error: filingError(isNetworkError(error) ? 'network' : 'failed') };
+  }
+  return { items: Array.isArray(data) ? (data as MissingItem[]) : [], error: null };
+}
+
+export type MissingItemDetails = {
+  /** Stable id for lists. */
+  id: string;
+  /** Plain-English line, e.g. "Paystack statement not uploaded". */
+  label: string;
+  /** The step that fixes it. */
+  step: FilingStep;
+  /** What to highlight on that step (a platform name or a deduction type). */
+  focus?: string;
+  /** For a missing document: the slot it fills, what it's called and how
+   * it's filed in Documents. */
+  document?: { slotKey: string; name: string; category: DocumentCategory };
+};
+
+const capitalize = (text: string) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
+
+export function describeMissingItem(item: MissingItem): MissingItemDetails {
+  switch (item.type) {
+    case 'income_sources':
+      return { id: 'income_sources', label: 'No income sources selected', step: 'select_platform' };
+    case 'income_amount':
+      return {
+        id: `income_amount:${item.platform}`,
+        label: `Income amount missing for ${item.platform}`,
+        step: 'income_summary',
+        focus: item.platform,
+      };
+    case 'platform_document':
+      return {
+        id: `platform:${item.platform}`,
+        label: `${platformDocumentLabel(item.platform)} not uploaded`,
+        step: 'upload_documents',
+        focus: item.platform,
+        document: {
+          slotKey: item.platform,
+          name: platformDocumentLabel(item.platform),
+          category: platformDocumentCategory(item.platform),
+        },
+      };
+    case 'deduction_document': {
+      const definition = DEDUCTION_DEFINITIONS.find((d) => d.id === item.deduction_type);
+      const name = capitalize(definition?.documentLabel ?? 'Deduction document');
+      return {
+        id: `deduction:${item.deduction_type}`,
+        label: `${name} not uploaded`,
+        step: 'deductions',
+        focus: item.deduction_type,
+        document: {
+          slotKey: `deduction:${item.deduction_type}`,
+          name,
+          category: definition?.documentCategory ?? 'other',
+        },
+      };
+    }
+    case 'review':
+    default:
+      return { id: 'review', label: 'Deductions not confirmed yet', step: 'deductions' };
+  }
 }
 
 /** How a status reads to the user. */

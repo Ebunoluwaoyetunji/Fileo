@@ -6,6 +6,11 @@
  *   -> pick -> quick type/size check -> ("What is this document?" sheet,
  *   Documents tab only) -> upload -> onUploaded(document).
  *
+ * With `slotChoices` (the Documents tab, while a draft return still needs
+ * documents), picking a file first asks "Is this for your {year} return?"
+ * listing the documents it needs; choosing one files it under that slot's
+ * category and passes the slot to onUploaded, so the caller can fill it.
+ *
  * Each upload slot (a platform, a deduction, the Documents tab) keys its
  * own state, so one screen can show several at once: idle, uploading, or
  * an error with a "Try again" when retrying can help (no connection /
@@ -56,8 +61,13 @@ export type UploadRequest = {
   category: DocumentCategory | 'ask';
   /** The filing's tax year inside the flow; defaults to the current tax year. */
   taxYear?: number;
-  onUploaded: (document: DocumentRecord) => void;
+  /** Documents the draft return still needs, offered after picking. */
+  slotChoices?: { taxYear: number; options: SlotChoice[] };
+  /** slotKey: the draft slot the user said this document is for. */
+  onUploaded: (document: DocumentRecord, slotKey?: string) => void;
 };
+
+export type SlotChoice = { slotKey: string; name: string; category: DocumentCategory };
 
 const IDLE: UploadSlotState = { status: 'idle' };
 
@@ -69,13 +79,19 @@ const waitForSheetToClose = () =>
 export function useDocumentUploader() {
   const [slots, setSlots] = useState<Record<string, UploadSlotState>>({});
   const [sourceRequest, setSourceRequest] = useState<UploadRequest | null>(null);
+  const [slotRequest, setSlotRequest] = useState<{ request: UploadRequest; file: PickedFile } | null>(
+    null
+  );
   const [categoryRequest, setCategoryRequest] = useState<{
     request: UploadRequest;
     file: PickedFile;
   } | null>(null);
   // The last failed attempt per slot, so "Try again" re-sends the same file.
   const lastAttempts = useRef<
-    Record<string, { request: UploadRequest; file: PickedFile; category: DocumentCategory }>
+    Record<
+      string,
+      { request: UploadRequest; file: PickedFile; category: DocumentCategory; slotKey?: string }
+    >
   >({});
 
   const setSlot = useCallback((key: string, state: UploadSlotState) => {
@@ -83,8 +99,13 @@ export function useDocumentUploader() {
   }, []);
 
   const run = useCallback(
-    async (request: UploadRequest, file: PickedFile, category: DocumentCategory) => {
-      lastAttempts.current[request.key] = { request, file, category };
+    async (
+      request: UploadRequest,
+      file: PickedFile,
+      category: DocumentCategory,
+      slotKey?: string
+    ) => {
+      lastAttempts.current[request.key] = { request, file, category, slotKey };
       setSlot(request.key, { status: 'uploading' });
       const result = await uploadDocument(file, {
         category,
@@ -101,7 +122,7 @@ export function useDocumentUploader() {
       }
       delete lastAttempts.current[request.key];
       setSlot(request.key, IDLE);
-      request.onUploaded(result.document);
+      request.onUploaded(result.document, slotKey);
     },
     [setSlot]
   );
@@ -126,11 +147,30 @@ export function useDocumentUploader() {
       setSlot(request.key, { status: 'error', message: problem.message, canRetry: false });
       return;
     }
+    if (request.slotChoices && request.slotChoices.options.length > 0) {
+      setSlotRequest({ request, file: picked.file });
+      return;
+    }
     if (request.category === 'ask') {
       setCategoryRequest({ request, file: picked.file });
       return;
     }
     await run(request, picked.file, request.category);
+  };
+
+  const chooseSlot = (choice: SlotChoice | null) => {
+    const pending = slotRequest;
+    setSlotRequest(null);
+    if (!pending) {
+      return;
+    }
+    if (choice) {
+      run(pending.request, pending.file, choice.category, choice.slotKey);
+    } else if (pending.request.category === 'ask') {
+      setCategoryRequest(pending);
+    } else {
+      run(pending.request, pending.file, pending.request.category);
+    }
   };
 
   const chooseCategory = (category: DocumentCategory) => {
@@ -154,7 +194,7 @@ export function useDocumentUploader() {
   const retry = (key: string) => {
     const attempt = lastAttempts.current[key];
     if (attempt) {
-      run(attempt.request, attempt.file, attempt.category);
+      run(attempt.request, attempt.file, attempt.category, attempt.slotKey);
     }
   };
 
@@ -181,6 +221,30 @@ export function useDocumentUploader() {
           label="Cancel"
           variant="ghost"
           onPress={() => setSourceRequest(null)}
+          style={styles.sheetButtonSpacing}
+        />
+      </BottomSheet>
+
+      <BottomSheet visible={slotRequest !== null} onClose={() => setSlotRequest(null)}>
+        <Text style={styles.sheetTitle}>
+          Is this for your {slotRequest?.request.slotChoices?.taxYear} return?
+        </Text>
+        <Text style={styles.sheetBody}>Your return still needs these documents.</Text>
+        {(slotRequest?.request.slotChoices?.options ?? []).map((choice, index) => (
+          <Pressable
+            key={choice.slotKey}
+            onPress={() => chooseSlot(choice)}
+            style={[styles.categoryRow, index === 0 && styles.categoryRowFirst]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.categoryLabel}>{choice.name}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </Pressable>
+        ))}
+        <Button
+          label="No, it's something else"
+          variant="secondary"
+          onPress={() => chooseSlot(null)}
           style={styles.sheetButtonSpacing}
         />
       </BottomSheet>

@@ -20,20 +20,32 @@
  * the button shows a spinner; a failure (no connection, or a step the
  * server says is incomplete) shows under the buttons and can be retried.
  * ⚠️ No design for the submitting / submit-failed states.
+ *
+ * Before anything is submitted, the screen asks the server what's still
+ * missing (the same rules submit_filing enforces) every time it's shown.
+ * Anything missing is listed in plain English ("Paystack statement not
+ * uploaded") with a "Fix" that opens the exact step with that item
+ * highlighted; Continue there comes straight back here. "Approve and
+ * submit" stays disabled, with a line saying why, until nothing is missing.
+ * If the server still refuses on submit (e.g. something changed on another
+ * device), its list is shown the same way.
+ * ⚠️ No design for the missing-items card, the checking / couldn't-check
+ * lines, or the disabled-submit explanation.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
-import { RequireDraft, SaveErrorNote } from '../../components/filing/FilingFlow';
+import { openFix, RequireDraft, SaveErrorNote } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
+import { describeMissingItem, getMissingItems, MissingItem } from '../../lib/filings';
 import { MOCK_TAX_RATE, useFiling } from '../../state/filingContext';
 
 function formatNaira(amount: number) {
@@ -49,9 +61,51 @@ export default function ReturnReviewScreen() {
 }
 
 function ReturnReviewContent() {
-  const { totalIncome, totalDeductions, incomeSources, deductions, taxYear, submit } = useFiling();
+  const {
+    totalIncome,
+    totalDeductions,
+    incomeSources,
+    deductions,
+    taxYear,
+    submit,
+    draft,
+    refreshDraft,
+  } = useFiling();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  // What's still missing, straight from the server's rules.
+  const [missingItems, setMissingItems] = useState<MissingItem[]>([]);
+  const [checkState, setCheckState] = useState<'checking' | 'done' | 'failed'>('checking');
+  const draftId = draft?.id;
+
+  const checkCompleteness = useCallback(async () => {
+    if (!draftId) {
+      return;
+    }
+    setCheckState('checking');
+    // Everything is saved by the time you're here, so start from what the
+    // server has (it may have changed on another device), and ask it what's
+    // missing.
+    const [result] = await Promise.all([getMissingItems(draftId), refreshDraft()]);
+    if (result.error) {
+      setCheckState('failed');
+      return;
+    }
+    setMissingItems(result.items);
+    setCheckState('done');
+  }, [draftId, refreshDraft]);
+
+  // Re-checked every time the screen is shown, e.g. after a Fix.
+  useFocusEffect(
+    useCallback(() => {
+      checkCompleteness();
+    }, [checkCompleteness])
+  );
+
+  const canSubmit = checkState === 'done' && missingItems.length === 0;
+  const missingDetails = missingItems.map(describeMissingItem);
   const taxableIncome = Math.max(totalIncome - totalDeductions, 0);
   const estimatedTaxDue = Math.round(taxableIncome * MOCK_TAX_RATE);
   const estimatedTaxSavings = Math.round(totalDeductions * MOCK_TAX_RATE);
@@ -74,6 +128,15 @@ function ReturnReviewContent() {
         router.replace('/(app)/filing-history');
         return;
       }
+      if (result.error.code === 'incomplete') {
+        // The server's own list, shown the same way as the pre-check.
+        setMissingItems(result.error.missingItems ?? []);
+        setCheckState('done');
+        setShowSubmitSheet(false);
+        refreshDraft();
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        return;
+      }
       setSubmitError(
         result.error.code === 'network'
           ? 'Couldn’t submit. Check your connection and try again.'
@@ -93,6 +156,7 @@ function ReturnReviewContent() {
       <BackButton />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -101,6 +165,26 @@ function ReturnReviewContent() {
           Take a moment to review your tax return before submitting it. You can still make
           changes if needed.
         </Text>
+
+        {checkState === 'done' && missingDetails.length > 0 ? (
+          <Card style={styles.missingCard}>
+            <Text style={styles.missingTitle}>Finish these before you submit</Text>
+            {missingDetails.map((item) => (
+              <View key={item.id} style={styles.missingRow}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+                <Text style={styles.missingLabel}>{item.label}</Text>
+                <Pressable
+                  onPress={() => openFix(item)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Fix: ${item.label}`}
+                >
+                  <Text style={styles.fixLink}>Fix</Text>
+                </Pressable>
+              </View>
+            ))}
+          </Card>
+        ) : null}
 
         <View style={styles.statsCard}>
           <View style={styles.statsRow}>
@@ -233,8 +317,29 @@ function ReturnReviewContent() {
           label="Approve and submit"
           variant="dark"
           onPress={() => setShowSubmitSheet(true)}
+          disabled={!canSubmit}
           style={styles.approveButton}
         />
+        {checkState === 'checking' ? (
+          <View style={styles.submitNoteRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.submitNote}>Checking your return…</Text>
+          </View>
+        ) : checkState === 'failed' ? (
+          <View style={styles.submitNoteRow}>
+            <Text style={styles.submitNote}>
+              Couldn&apos;t check your return. Check your connection.
+            </Text>
+            <Pressable onPress={checkCompleteness} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.fixLink}>Try again</Text>
+            </Pressable>
+          </View>
+        ) : missingDetails.length > 0 ? (
+          <Text style={[styles.submitNote, styles.submitNoteCentered]}>
+            Finish the {missingDetails.length === 1 ? 'item' : `${missingDetails.length} items`} at
+            the top before you submit.
+          </Text>
+        ) : null}
         <Button
           label="I want to make a change"
           variant="ghost"
@@ -446,6 +551,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   approveButton: {
+    marginBottom: spacing.sm,
+  },
+  missingCard: {
+    borderWidth: 1,
+    borderColor: colors.danger,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  missingTitle: {
+    ...typography.bodyStrong,
+    color: colors.textPrimary,
+  },
+  missingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  missingLabel: {
+    ...typography.body,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  fixLink: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  submitNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  submitNote: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  submitNoteCentered: {
+    textAlign: 'center',
     marginBottom: spacing.sm,
   },
   sheetContent: {

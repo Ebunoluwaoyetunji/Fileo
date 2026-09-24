@@ -20,7 +20,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
+import {
+  RequireDraft,
+  SaveErrorNote,
+  useFixMode,
+  useSaveAndContinue,
+} from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
@@ -57,6 +62,8 @@ export default function IncomeSummaryScreen() {
 
 function IncomeSummaryContent() {
   const { selectedPlatforms, incomeSources, setIncomeSources, taxYear } = useFiling();
+  // Opened from Return Review's "Fix": highlight the source missing its amount.
+  const { focus } = useFixMode();
   const { isSaving, error: saveError, saveAndContinue } = useSaveAndContinue(
     'deductions',
     '/(app)/deductions'
@@ -142,7 +149,10 @@ function IncomeSummaryContent() {
         <Text style={styles.sectionTitle}>Income Summary</Text>
         <Card style={styles.summaryCard}>
           {incomeSources.map((source) => (
-            <View key={source.id} style={styles.summaryRow}>
+            <View
+              key={source.id}
+              style={[styles.summaryRow, focus === source.label && styles.summaryRowHighlighted]}
+            >
               <PlatformIcon label={source.label} size={32} />
               <Text style={styles.summaryLabel}>{source.label}</Text>
               <Text style={styles.summaryValue}>{formatNaira(source.amount)}</Text>
@@ -256,6 +266,12 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     marginBottom: spacing.lg,
+  },
+  summaryRowHighlighted: {
+    backgroundColor: colors.warningLight,
+    borderRadius: radii.sm,
+    marginHorizontal: -spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   summaryRow: {
     flexDirection: 'row',

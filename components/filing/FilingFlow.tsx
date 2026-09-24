@@ -9,6 +9,12 @@
  *    connection) the user's input stays as it is, an error shows under the
  *    button, and tapping Continue again retries.
  *  - SaveErrorNote: that error.
+ *  - useMissingItems: what the draft still needs, from the server's own
+ *    completeness rules (the same ones submit_filing enforces), re-checked
+ *    whenever the screen is shown.
+ *  - Fix mode: Return Review's "Fix" opens a step with `fix=1` (and `focus`,
+ *    the platform or deduction to highlight). In fix mode, Continue saves
+ *    and goes straight back to Return Review instead of on to the next step.
  *  - useStartFiling: every "start filing" button (Home, the File tab). Resumes
  *    the draft at its saved step, or creates one for the current tax year —
  *    never a second draft — or opens the File tab if this year is filed.
@@ -16,12 +22,18 @@
  * ⚠️ No Figma design for the saving / save-failed states — built from the
  * existing Button loading spinner and the danger caption style.
  */
-import { Href, Redirect, router } from 'expo-router';
-import { ReactNode, useState } from 'react';
+import { Href, Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { ReactNode, useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
-import type { FilingStep } from '../../lib/filings';
+import {
+  FilingStep,
+  getMissingItems,
+  MissingItem,
+  MissingItemDetails,
+  STEP_ROUTES,
+} from '../../lib/filings';
 import { useFiling } from '../../state/filingContext';
 
 export function RequireDraft({ children }: { children: ReactNode }) {
@@ -39,8 +51,51 @@ export function RequireDraft({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+export function useMissingItems(draftId: string | undefined) {
+  const [items, setItems] = useState<MissingItem[] | null>(null);
+  const [state, setState] = useState<'checking' | 'done' | 'failed'>('checking');
+
+  const recheck = useCallback(async () => {
+    if (!draftId) {
+      setItems(null);
+      return;
+    }
+    setState('checking');
+    const result = await getMissingItems(draftId);
+    if (result.error) {
+      setState('failed');
+      return;
+    }
+    setItems(result.items);
+    setState('done');
+  }, [draftId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      recheck();
+    }, [recheck])
+  );
+
+  return { items, state, recheck, setItems };
+}
+
+/** Opens the step that fixes a missing item, highlighting it. */
+export function openFix(details: MissingItemDetails) {
+  router.push({
+    pathname: STEP_ROUTES[details.step] as never,
+    params: { fix: '1', ...(details.focus ? { focus: details.focus } : {}) },
+  });
+}
+
+/** Whether this step was opened from Return Review's "Fix", and what to highlight. */
+export function useFixMode() {
+  const { fix, focus } = useLocalSearchParams<{ fix?: string; focus?: string }>();
+  return { isFixing: fix === '1', focus: fix === '1' ? focus : undefined };
+}
+
 export function useSaveAndContinue(nextStep: FilingStep, nextRoute: Href) {
   const { saveProgress } = useFiling();
+  const { isFixing } = useFixMode();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +106,8 @@ export function useSaveAndContinue(nextStep: FilingStep, nextRoute: Href) {
     }
     setIsSaving(true);
     setError(null);
-    const result = await saveProgress(nextStep);
+    // Fixing something from Return Review: save, and go straight back there.
+    const result = await saveProgress(isFixing ? 'return_review' : nextStep);
     setIsSaving(false);
     if (result.error) {
       if (result.error.code === 'not_draft') {
@@ -65,7 +121,11 @@ export function useSaveAndContinue(nextStep: FilingStep, nextRoute: Href) {
       );
       return false;
     }
-    router.push(nextRoute);
+    if (isFixing) {
+      router.dismissTo('/(app)/return-review');
+    } else {
+      router.push(nextRoute);
+    }
     return true;
   };
 
