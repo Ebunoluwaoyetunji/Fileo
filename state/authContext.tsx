@@ -43,6 +43,10 @@ export type Profile = {
   identity_check_type: 'bvn' | 'nin' | null;
   identity_provider: string | null;
   identity_reference: string | null;
+  /** When the user allowed AI reading of their statements (null = not allowed). */
+  ai_consent_at: string | null;
+  /** When they chose "Enter manually" or switched AI reading off. */
+  ai_consent_declined_at: string | null;
   created_at: string;
 };
 

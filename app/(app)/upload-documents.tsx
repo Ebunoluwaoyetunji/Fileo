@@ -12,6 +12,11 @@
  * platform's slot in the draft right away; "Change" uploads a replacement
  * and only then deletes the old file. Continue saves the step.
  *
+ * Uploaded statements are then read by AI in the background (if the user
+ * allowed it; the consent screen opens here the first time): each card
+ * shows "Reading your statement…" and then the result, and the user can
+ * keep going meanwhile.
+ *
  * "Send upload link to my email" is still a mock (no email is sent): it
  * only shows its toast and doesn't mark anything as uploaded, since
  * submitting needs the real documents.
@@ -22,9 +27,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   RequireDraft,
   SaveErrorNote,
+  useAiConsentPrompt,
   useFixMode,
   useSaveAndContinue,
 } from '../../components/filing/FilingFlow';
+import { StatementReadingStatus } from '../../components/filing/StatementReadingStatus';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
@@ -73,6 +80,7 @@ function UploadDocumentsContent() {
     '/(app)/income-summary'
   );
   const uploader = useDocumentUploader();
+  useAiConsentPrompt();
   // Opened from Return Review's "Fix": outline that platform's card and
   // scroll to it.
   const { focus } = useFixMode();
@@ -220,6 +228,9 @@ function UploadDocumentsContent() {
                     />
                   )}
                   <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(bank)} />
+                  {isManuallyUploaded ? (
+                    <StatementReadingStatus documentId={documentIdsByKey[bank]} />
+                  ) : null}
                 </Card>
               );
             })}
@@ -267,6 +278,11 @@ function UploadDocumentsContent() {
                           <Text style={styles.pulledLabel}>Uploaded</Text>
                         </View>
                         <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                      </View>
+                    ) : null}
+                    {isUploaded ? (
+                      <View style={styles.readingStatus}>
+                        <StatementReadingStatus documentId={documentIdsByKey[platform]} />
                       </View>
                     ) : (
                       <>
@@ -331,6 +347,10 @@ function UploadDocumentsContent() {
 }
 
 const styles = StyleSheet.create({
+  readingStatus: {
+    alignSelf: 'stretch',
+    marginTop: spacing.sm,
+  },
   title: {
     ...typography.display,
     fontSize: 24,

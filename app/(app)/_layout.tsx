@@ -43,6 +43,7 @@ export default function AppLayout() {
         <Stack.Screen name="deductions" />
         <Stack.Screen name="return-review" />
         <Stack.Screen name="confirmation" />
+        <Stack.Screen name="ai-consent" options={{ presentation: 'modal' }} />
       </Stack>
     </FilingProvider>
   );

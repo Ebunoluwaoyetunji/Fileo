@@ -8,19 +8,25 @@
  * "allowable business expenses" field. The user ticks "I confirm these
  * amounts…" before continuing; that confirmation is saved with the figures
  * and cleared by the server if they change later. Each amount records where
- * it came from: 'manual' (typed) or 'ai' — an amount the server suggested
- * from the uploaded statement (ai_suggested_kobo, next task) that the user
- * accepted unchanged. A suggestion is pre-filled with a note to check it;
- * editing it makes it 'manual'.
+ * it came from: 'manual' (typed) or 'ai' — the income the server read from
+ * the platform's uploaded statement (lib/extractions) that the user
+ * accepted unchanged. A suggestion is pre-filled with a note to check it,
+ * the period the statement covers and any warnings (part of the year, the
+ * wrong year, a foreign currency — which is never converted, so nothing is
+ * pre-filled); editing it makes it 'manual'. While a statement is still
+ * being read the row says so and fills in when the result arrives. If it
+ * couldn't be read, the row says why and the user types the amount.
  *
- * The flagged transaction is still the frame's mock example (12 Mar,
- * ₦350,000), shown only when a Nigerian bank was selected (flagged items
- * conceptually come from parsing an auto-pulled bank statement).
+ * Flagged transactions are the real ones the AI wasn't sure about: each
+ * shows its date, amount and description, and the user answers Income or
+ * not (own transfer, refund, loan, reversal, other). Answers are saved
+ * straight away and the server recalculates the suggestion.
  *
  * ⚠️ No Figma design for the amount fields, the expenses field, the
- * confirmation checkbox, the AI-suggestion note or the validation errors —
- * built from the existing TextField, checkbox (Select Bank) and caption
- * styles.
+ * confirmation checkbox, the AI-suggestion note, the reading / warning /
+ * failure lines, the flagged-transaction answers or the validation errors —
+ * built from the existing TextField, checkbox (Select Bank), chip and
+ * caption styles.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
@@ -28,9 +34,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   RequireDraft,
   SaveErrorNote,
+  useAiConsentPrompt,
   useFixMode,
   useSaveAndContinue,
 } from '../../components/filing/FilingFlow';
+import { StatementReadingStatus } from '../../components/filing/StatementReadingStatus';
 import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
@@ -40,20 +48,16 @@ import { TextField } from '../../components/ui/TextField';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { colors } from '../../constants/colors';
-import { isNigerianBank } from '../../constants/platforms';
 import { radii, spacing, typography } from '../../constants/theme';
 import { checkAmount, formatNaira, formatNairaInput, koboToInput, parseNairaInput } from '../../lib/money';
+import {
+  DECISION_OPTIONS,
+  Extraction,
+  formatIsoDate,
+  formatStatementAmount,
+  TransactionDecision,
+} from '../../lib/extractions';
 import { useFiling } from '../../state/filingContext';
-
-const CATEGORY_OPTIONS = ['Salary', 'Business', 'Investment', 'Other'];
-
-type FlaggedTransaction = {
-  id: string;
-  date: string;
-  /** Whole kobo. */
-  amount: number;
-  category: string | null;
-};
 
 export default function IncomeSummaryScreen() {
   return (
@@ -72,7 +76,11 @@ function IncomeSummaryContent() {
     businessExpensesKobo,
     setBusinessExpensesKobo,
     taxYear,
+    documentIdsByKey,
+    extractionsByDocumentId,
+    decideFlagged,
   } = useFiling();
+  useAiConsentPrompt();
   // Opened from Return Review's "Fix": highlight the source missing its
   // amount (focus), or the confirmation (no focus).
   const { isFixing, focus } = useFixMode();
@@ -83,27 +91,39 @@ function IncomeSummaryContent() {
 
   const savedSource = (platform: string) => incomeSources.find((s) => s.label === platform);
 
-  // What's typed in each field. A platform with no amount yet but an AI
-  // suggestion starts with the suggestion.
+  /** The read result for this platform's statement, if any. */
+  const extractionFor = (platform: string): Extraction | undefined => {
+    const documentId = documentIdsByKey[platform];
+    return documentId ? extractionsByDocumentId[documentId] : undefined;
+  };
+  /** The server's suggested income for this platform, or null. Uses the
+   * latest read result once loaded, else what was saved on the draft. */
+  const suggestionFor = (platform: string): number | null => {
+    const extraction = extractionFor(platform);
+    if (extraction) {
+      return extraction.status === 'done' ? extraction.suggestedIncomeKobo : null;
+    }
+    return savedSource(platform)?.aiSuggestedKobo ?? null;
+  };
+  /** Starts from the suggestion: nothing entered yet, or the suggestion was
+   * accepted unchanged before ('ai'). A typed ('manual') amount is kept. */
+  const usesSuggestion = (platform: string) => {
+    const saved = savedSource(platform);
+    return suggestionFor(platform) !== null && (saved?.amountKobo == null || saved.amountSource === 'ai');
+  };
+
+  // What's typed in each field.
   const [inputs, setInputs] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      selectedPlatforms.map((platform) => {
-        const saved = savedSource(platform);
-        return [platform, koboToInput(saved?.amountKobo ?? saved?.aiSuggestedKobo ?? null)];
-      })
+      selectedPlatforms.map((platform) => [
+        platform,
+        koboToInput(usesSuggestion(platform) ? suggestionFor(platform) : savedSource(platform)?.amountKobo ?? null),
+      ])
     )
   );
   // Platforms whose field still holds the AI suggestion, unedited.
   const [aiPrefilled, setAiPrefilled] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(
-      selectedPlatforms.map((platform) => {
-        const saved = savedSource(platform);
-        const fromAi =
-          saved?.aiSuggestedKobo != null &&
-          (saved.amountKobo === null || (saved.amountSource === 'ai' && saved.amountKobo === saved.aiSuggestedKobo));
-        return [platform, fromAi];
-      })
-    )
+    Object.fromEntries(selectedPlatforms.map((platform) => [platform, usesSuggestion(platform)]))
   );
   const [expensesInput, setExpensesInput] = useState(() =>
     businessExpensesKobo ? koboToInput(businessExpensesKobo) : ''
@@ -113,10 +133,54 @@ function IncomeSummaryContent() {
   const [expensesError, setExpensesError] = useState<string | undefined>();
   const [confirmError, setConfirmError] = useState<string | undefined>();
 
-  const [flaggedTransactions, setFlaggedTransactions] = useState<FlaggedTransaction[]>([]);
-  const [flaggedInitialized, setFlaggedInitialized] = useState(false);
-  const hasFlaggedTransactions = flaggedTransactions.length > 0;
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
+  const [decisionErrors, setDecisionErrors] = useState<Record<string, boolean>>({});
+
+  // A suggestion that arrives (statement read) or changes (a flagged item
+  // answered) fills the field — unless the user has typed their own amount.
+  const suggestionKey = selectedPlatforms.map((p) => `${p}:${suggestionFor(p)}`).join('|');
+  useEffect(() => {
+    selectedPlatforms.forEach((platform) => {
+      const suggestion = suggestionFor(platform);
+      if (suggestion === null) {
+        return;
+      }
+      const current = inputs[platform] ?? '';
+      const untouched = current.trim() === '' || aiPrefilled[platform];
+      const next = koboToInput(suggestion);
+      if (untouched && next !== current) {
+        setInputs((prev) => ({ ...prev, [platform]: next }));
+        setAiPrefilled((prev) => ({ ...prev, [platform]: true }));
+        setAmountErrors((prev) => ({ ...prev, [platform]: '' }));
+        if (current.trim() !== '') {
+          // The figure changed under the tick: confirm it again.
+          setConfirmed(false);
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestionKey]);
+
+  // Transactions the AI wasn't sure about, per platform statement.
+  const flaggedGroups = selectedPlatforms
+    .map((platform) => ({
+      platform,
+      documentId: documentIdsByKey[platform],
+      extraction: extractionFor(platform),
+    }))
+    .filter(
+      (group): group is { platform: string; documentId: string; extraction: Extraction } =>
+        !!group.documentId && group.extraction?.status === 'done' && group.extraction.flagged.length > 0
+    );
+  const hasFlaggedTransactions = flaggedGroups.length > 0;
+
+  const handleDecision = async (documentId: string, transactionId: string, decision: TransactionDecision) => {
+    setDecisionErrors((prev) => ({ ...prev, [transactionId]: false }));
+    const { error } = await decideFlagged(documentId, transactionId, decision);
+    if (error) {
+      setDecisionErrors((prev) => ({ ...prev, [transactionId]: true }));
+    }
+  };
 
   // Keep the filing's working copy in step with the fields, so Continue
   // saves exactly what's on screen.
@@ -184,31 +248,10 @@ function IncomeSummaryContent() {
     return Object.keys(errors).length === 0 && !expenses && !confirm;
   };
 
-  // Same "wait for real data, then decide once" approach as above — a lazy
-  // useState initializer would have frozen this at whatever
-  // selectedPlatforms was when the screen component was first constructed,
-  // which can predate the user's actual selection (React Navigation may
-  // construct a screen before it's focused).
-  useEffect(() => {
-    if (flaggedInitialized || selectedPlatforms.length === 0) {
-      return;
-    }
-    setFlaggedInitialized(true);
-    if (selectedPlatforms.some(isNigerianBank)) {
-      setFlaggedTransactions([
-        { id: 'flagged-1', date: `12 Mar ${taxYear}`, amount: 35000000, category: null },
-      ]);
-    }
-  }, [selectedPlatforms, flaggedInitialized]);
-
-  const allCategorized = flaggedTransactions.every((t) => t.category !== null);
+  const allCategorized = flaggedGroups.every((group) =>
+    group.extraction.flagged.every((t) => t.decision !== null)
+  );
   const completeButtonLabel = hasFlaggedTransactions ? 'Complete transaction review' : 'Continue';
-
-  const handleSelectCategory = (transactionId: string, category: string) => {
-    setFlaggedTransactions((prev) =>
-      prev.map((t) => (t.id === transactionId ? { ...t, category } : t))
-    );
-  };
 
   const handleCompleteReview = () => {
     if (!allCategorized || !validate()) {
@@ -248,6 +291,9 @@ function IncomeSummaryContent() {
               <View style={styles.summaryRow}>
                 <PlatformIcon label={platform} size={32} />
                 <Text style={styles.summaryLabel}>{platform}</Text>
+              </View>
+              <View style={styles.readingStatus}>
+                <StatementReadingStatus documentId={documentIdsByKey[platform]} variant="full" />
               </View>
               {aiPrefilled[platform] ? (
                 <Text style={styles.aiNote}>
@@ -291,6 +337,77 @@ function IncomeSummaryContent() {
           blank if none.
         </Text>
 
+
+        {hasFlaggedTransactions ? (
+          <>
+            <View style={styles.flaggedHeaderRow}>
+              <Text style={styles.sectionTitle}>Flagged Transactions</Text>
+              <View style={styles.needsReviewBadge}>
+                <Text style={styles.needsReviewBadgeText}>Needs your review</Text>
+              </View>
+            </View>
+            <Text style={styles.flaggedDescription}>
+              We couldn&apos;t tell whether these payments are income. Tell us what each one is;
+              only income counts towards your tax.
+            </Text>
+
+            {flaggedGroups.map((group) => (
+              <View key={group.platform}>
+                {flaggedGroups.length > 1 || selectedPlatforms.length > 1 ? (
+                  <Text style={styles.flaggedSource}>From your {group.platform} statement</Text>
+                ) : null}
+                {group.extraction.flagged.map((transaction) => (
+                  <Card
+                    key={transaction.id}
+                    style={[
+                      styles.flaggedCard,
+                      isFixing &&
+                        focus === group.platform &&
+                        transaction.decision === null &&
+                        styles.flaggedCardHighlighted,
+                    ]}
+                  >
+                    <View style={styles.flaggedTopRow}>
+                      <Text style={styles.flaggedDate}>{formatIsoDate(transaction.date)}</Text>
+                      <Text style={styles.flaggedAmount}>
+                        {formatStatementAmount(transaction.amountMinor, group.extraction.currency)}
+                      </Text>
+                    </View>
+                    <Text style={styles.flaggedDescriptionText}>{transaction.description}</Text>
+                    <Text style={styles.flaggedPrompt}>Is this income?</Text>
+                    <View style={styles.categoryRow}>
+                      {DECISION_OPTIONS.map((option) => {
+                        const isSelected = transaction.decision === option.value;
+                        return (
+                          <Pressable
+                            key={option.value}
+                            onPress={() => handleDecision(group.documentId, transaction.id, option.value)}
+                            style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
+                            accessibilityRole="radio"
+                            aria-checked={isSelected}
+                          >
+                            <Text
+                              style={[
+                                styles.categoryChipText,
+                                isSelected && styles.categoryChipTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {decisionErrors[transaction.id] ? (
+                      <Text style={styles.decisionError}>Couldn’t save your answer. Try again.</Text>
+                    ) : null}
+                  </Card>
+                ))}
+              </View>
+            ))}
+          </>
+        ) : null}
+
         <Pressable
           onPress={() => {
             setConfirmed((prev) => !prev);
@@ -313,52 +430,6 @@ function IncomeSummaryContent() {
           </Text>
         </Pressable>
         {confirmError ? <Text style={styles.confirmError}>{confirmError}</Text> : null}
-
-        {hasFlaggedTransactions ? (
-          <>
-            <View style={styles.flaggedHeaderRow}>
-              <Text style={styles.sectionTitle}>Flagged Transactions</Text>
-              <View style={styles.needsReviewBadge}>
-                <Text style={styles.needsReviewBadgeText}>Needs your review</Text>
-              </View>
-            </View>
-            <Text style={styles.flaggedDescription}>
-              We couldn&apos;t automatically determine the purpose of these transactions. Select
-              the category that best describes each one.
-            </Text>
-
-            {flaggedTransactions.map((transaction) => (
-              <Card key={transaction.id} style={styles.flaggedCard}>
-                <View style={styles.flaggedTopRow}>
-                  <Text style={styles.flaggedDate}>{transaction.date}</Text>
-                  <Text style={styles.flaggedAmount}>{formatNaira(transaction.amount)}</Text>
-                </View>
-                <Text style={styles.flaggedPrompt}>What&apos;s this transaction for?</Text>
-                <View style={styles.categoryRow}>
-                  {CATEGORY_OPTIONS.map((category) => {
-                    const isSelected = transaction.category === category;
-                    return (
-                      <Pressable
-                        key={category}
-                        onPress={() => handleSelectCategory(transaction.id, category)}
-                        style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
-                      >
-                        <Text
-                          style={[
-                            styles.categoryChipText,
-                            isSelected && styles.categoryChipTextSelected,
-                          ]}
-                        >
-                          {category}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </Card>
-            ))}
-          </>
-        ) : null}
       </ScrollView>
 
       <Button
@@ -417,6 +488,28 @@ const styles = StyleSheet.create({
   },
   incomeRow: {
     marginBottom: spacing.sm,
+  },
+  readingStatus: {
+    marginBottom: spacing.xs,
+  },
+  flaggedSource: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  flaggedCardHighlighted: {
+    borderWidth: 2,
+    borderColor: colors.warning,
+  },
+  flaggedDescriptionText: {
+    ...typography.body,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  decisionError: {
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.sm,
   },
   aiNote: {
     ...typography.caption,

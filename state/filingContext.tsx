@@ -11,6 +11,11 @@
  *    exactly what was last saved.
  *  - Uploaded documents are linked to their slot as soon as they're uploaded
  *    (and again on Continue, in case that first link didn't get through).
+ *  - Statements (documents in a platform slot) are read by AI on the server
+ *    when the user has allowed it (lib/extractions): reading starts as soon
+ *    as one is uploaded, and the results are watched here — polled every few
+ *    seconds while any is still being read — so every screen can show
+ *    "Reading your statement…" and the user can keep going meanwhile.
  *
  * Scoped to the (app) route group, which only renders while signed in, so
  * signing out (or in as someone else) starts from a fresh load.
@@ -41,8 +46,23 @@ import {
   STEP_ROUTES,
   submitFiling,
 } from '../lib/filings';
+import {
+  decideTransaction,
+  Extraction,
+  getExtractions,
+  isReading,
+  startExtraction,
+  TransactionDecision,
+} from '../lib/extractions';
+import { useAuth } from './authContext';
 
 export type { Deduction, Filing, IncomeSource } from '../lib/filings';
+
+/** How often to re-check statements that are still being read. */
+const EXTRACTION_POLL_MS = 3000;
+
+/** Slot keys that hold a statement (platform slots, not deduction receipts). */
+const isStatementSlot = (key: string) => !key.startsWith('deduction:');
 
 /** A submitted return (anything past draft). */
 export type FilingHistoryEntry = Filing & { reference: string; submittedAt: string };
@@ -115,6 +135,20 @@ type FilingContextValue = WorkingCopy & {
     nextStep: FilingStep,
     options?: { incomeConfirmed?: boolean }
   ) => Promise<{ error: FilingError | null }>;
+  /** Whether the user has allowed AI reading of their statements. */
+  aiConsent: 'allowed' | 'declined' | 'undecided';
+  /** AI reading results for the draft's statements, by document id. */
+  extractionsByDocumentId: Record<string, Extraction>;
+  /** Why reading couldn't start for a document (e.g. today's limit), by id. */
+  extractionStartErrors: Record<string, string>;
+  /** Starts (or retries) AI reading of a statement, if the user allowed it. */
+  readStatement: (documentId: string) => Promise<void>;
+  /** Answers a flagged transaction; the server recalculates the suggestion. */
+  decideFlagged: (
+    documentId: string,
+    transactionId: string,
+    decision: TransactionDecision
+  ) => Promise<{ error: boolean }>;
   /** Submits the draft; the server checks it and returns the reference. */
   submit: () => Promise<
     { reference: string; submittedAt: string; error: null } | { reference: null; submittedAt: null; error: FilingError }
@@ -252,11 +286,17 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         setDraft((prev) =>
           prev ? { ...prev, documentIdsByKey: { ...prev.documentIdsByKey, [key]: documentId } } : prev
         );
+        // A statement: start reading it now (in the background).
+        if (isStatementSlot(key)) {
+          readStatementRef.current(documentId);
+        }
       }
       return { error };
     },
     [draft]
   );
+  // addUploadedDocument is defined before readStatement; reach it via a ref.
+  const readStatementRef = useRef<(documentId: string) => Promise<void>>(async () => {});
 
   const forgetDocument = useCallback((documentId: string) => {
     const without = (map: Record<string, string>) =>
@@ -264,6 +304,138 @@ export function FilingProvider({ children }: { children: ReactNode }) {
     setWorking((prev) => ({ ...prev, documentIdsByKey: without(prev.documentIdsByKey) }));
     setDraft((prev) => (prev ? { ...prev, documentIdsByKey: without(prev.documentIdsByKey) } : prev));
   }, []);
+
+  // ─── AI reading of statements ────────────────────────────────────────────
+  const { profile } = useAuth();
+  const aiConsent: FilingContextValue['aiConsent'] = profile?.ai_consent_at
+    ? 'allowed'
+    : profile?.ai_consent_declined_at
+      ? 'declined'
+      : 'undecided';
+  const [extractionsByDocumentId, setExtractions] = useState<Record<string, Extraction>>({});
+  const [extractionStartErrors, setStartErrors] = useState<Record<string, string>>({});
+  // Documents this session has already asked the server to read, so each is
+  // only started automatically once.
+  const requestedReads = useRef<Set<string>>(new Set());
+
+  const statementIds = useMemo(
+    () =>
+      Object.entries(working.documentIdsByKey)
+        .filter(([key]) => isStatementSlot(key))
+        .map(([, id]) => id)
+        .sort(),
+    [working.documentIdsByKey]
+  );
+  const statementIdsKey = statementIds.join(',');
+
+  const refreshExtractions = useCallback(async (ids: string[]) => {
+    const result = await getExtractions(ids);
+    if (!result.error) {
+      setExtractions((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => {
+          if (result.extractions[id]) {
+            next[id] = result.extractions[id];
+          } else {
+            delete next[id];
+          }
+        });
+        return next;
+      });
+    }
+  }, []);
+
+  const readStatement = useCallback<FilingContextValue['readStatement']>(
+    async (documentId) => {
+      if (aiConsent !== 'allowed') {
+        return;
+      }
+      requestedReads.current.add(documentId);
+      setStartErrors((prev) => {
+        const { [documentId]: _removed, ...rest } = prev;
+        return rest;
+      });
+      const result = await startExtraction(documentId);
+      if (result.status === 'rate_limited') {
+        setStartErrors((prev) => ({
+          ...prev,
+          [documentId]:
+            result.message ?? 'You’ve reached today’s limit for reading statements. Type the amount instead.',
+        }));
+      } else if (result.status === 'error') {
+        setStartErrors((prev) => ({
+          ...prev,
+          [documentId]: 'We couldn’t start reading this statement. Try again, or type the amount.',
+        }));
+      }
+      await refreshExtractions([documentId]);
+    },
+    [aiConsent, refreshExtractions]
+  );
+
+  // Load results for the draft's statements, and start reading any that
+  // haven't been read yet (e.g. uploaded before the user allowed it).
+  useEffect(() => {
+    if (statementIds.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const result = await getExtractions(statementIds);
+      if (cancelled || result.error) {
+        return;
+      }
+      setExtractions((prev) => ({ ...prev, ...result.extractions }));
+      if (aiConsent === 'allowed') {
+        statementIds
+          .filter((id) => !result.extractions[id] && !requestedReads.current.has(id))
+          .forEach((id) => {
+            readStatement(id);
+          });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statementIdsKey, aiConsent]);
+
+  // While anything is being read, check again every few seconds.
+  const readingIds = statementIds.filter((id) => isReading(extractionsByDocumentId[id]));
+  const readingKey = readingIds.join(',');
+  useEffect(() => {
+    if (readingIds.length === 0) {
+      return;
+    }
+    const timer = setTimeout(() => refreshExtractions(readingIds), EXTRACTION_POLL_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readingKey, extractionsByDocumentId, refreshExtractions]);
+
+  const decideFlagged = useCallback<FilingContextValue['decideFlagged']>(
+    async (documentId, transactionId, decision) => {
+      // Show the answer straight away; the server's suggestion follows.
+      setExtractions((prev) => {
+        const current = prev[documentId];
+        if (!current) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [documentId]: {
+            ...current,
+            flagged: current.flagged.map((t) => (t.id === transactionId ? { ...t, decision } : t)),
+          },
+        };
+      });
+      const result = await decideTransaction(transactionId, decision);
+      await refreshExtractions([documentId]);
+      return result;
+    },
+    [refreshExtractions]
+  );
+
+  readStatementRef.current = readStatement;
 
   const submit = useCallback<FilingContextValue['submit']>(async () => {
     if (!draft) {
@@ -309,11 +481,21 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         setWorking((prev) => ({ ...prev, businessExpensesKobo })),
       setDeductions: (deductions) => setWorking((prev) => ({ ...prev, deductions })),
       totalIncomeKobo,
+      aiConsent,
+      extractionsByDocumentId,
+      extractionStartErrors,
+      readStatement,
+      decideFlagged,
       startFiling,
       saveProgress,
       submit,
     };
   }, [
+    aiConsent,
+    extractionsByDocumentId,
+    extractionStartErrors,
+    readStatement,
+    decideFlagged,
     working,
     isLoading,
     loadError,

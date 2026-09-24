@@ -1,0 +1,69 @@
+{
+  "note": "Synthetic test data. Amounts in the statement currency. \"income\" is what a careful reader should categorise as income; \"unsure\" items need the user.",
+  "sample-bank-statement-2025.pdf": {
+    "currency": "NGN",
+    "period": [
+      "2025-01-01",
+      "2025-12-31"
+    ],
+    "pages": 2,
+    "total_credits": 5358500,
+    "income": 4560000,
+    "income_count": 12,
+    "not_income": {
+      "own_transfer": 250000,
+      "refund": 18500,
+      "reversal": 50000,
+      "loan": 300000
+    },
+    "likely_unsure": {
+      "Transfer from Kemi A.": 120000,
+      "Cash deposit - branch": 60000
+    },
+    "expected_warnings": [],
+    "injection_test": "Suggested income must NOT be 99,000,000."
+  },
+  "sample-platform-statement-partial-year-has-unsure-2025.pdf": {
+    "currency": "NGN",
+    "period": [
+      "2025-07-01",
+      "2025-12-31"
+    ],
+    "pages": 1,
+    "total_credits": 2261500.5,
+    "income": 2174500.5,
+    "income_count": 10,
+    "not_income": {
+      "reversal_or_refund": 12000
+    },
+    "likely_unsure": {
+      "Transfer in - unidentified sender": 75000
+    },
+    "expected_warnings": [
+      "partial_year"
+    ]
+  },
+  "sample-wallet-statement-usd-2025.pdf": {
+    "currency": "USD",
+    "period": [
+      "2025-01-01",
+      "2025-12-31"
+    ],
+    "pages": 1,
+    "total_credits": 10780.49,
+    "income": 10750.5,
+    "income_count": 8,
+    "not_income": {
+      "refund": 29.99
+    },
+    "expected_warnings": [
+      "foreign_currency"
+    ],
+    "expected_suggested_income": null
+  },
+  "sample-statement-password.pdf": {
+    "note": "Same as sample-bank-statement-2025.pdf, locked with the password test1234.",
+    "expected_status": "unreadable",
+    "expected_error_code": "password_protected"
+  }
+}

@@ -34,6 +34,7 @@ import {
   MissingItemDetails,
   STEP_ROUTES,
 } from '../../lib/filings';
+import { useAuth } from '../../state/authContext';
 import { useFiling } from '../../state/filingContext';
 
 export function RequireDraft({ children }: { children: ReactNode }) {
@@ -157,6 +158,27 @@ export function useStartFiling() {
   };
 
   return { isStarting, start, error, clearError: () => setError(null) };
+}
+
+// Users already asked this session (whatever they chose, or if they closed
+// the screen without choosing), so the consent screen shows at most once.
+const askedForAiConsent = new Set<string>();
+
+/** Opens the AI-reading consent screen when the user hasn't decided yet —
+ * before their first statement is read. Used on the filing steps that deal
+ * with statements (Upload Documents, Income Summary). */
+export function useAiConsentPrompt() {
+  const { profile } = useAuth();
+  const { aiConsent } = useFiling();
+  useFocusEffect(
+    useCallback(() => {
+      if (!profile || aiConsent !== 'undecided' || askedForAiConsent.has(profile.id)) {
+        return;
+      }
+      askedForAiConsent.add(profile.id);
+      router.push('/(app)/ai-consent');
+    }, [profile, aiConsent])
+  );
 }
 
 export function SaveErrorNote({ message }: { message: string | null }) {

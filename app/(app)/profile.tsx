@@ -17,7 +17,10 @@
  *    anywhere, and the table's check constraints reject unmasked values).
  *    The "verification" behind it is still a format-only mock.
  *  - Active Sessions is mock data (no real session backend exists).
- *  - Preferences/2FA toggles are local-only, no real settings backend.
+ *  - Preferences/2FA toggles are local-only, no real settings backend —
+ *    except "Read statements with AI", which is the user's real consent to
+ *    AI reading of their statements (profiles.ai_consent_at, via
+ *    set_ai_consent); switching it off stops new statements being read.
  *  - Change Password is real (AuthContext.changePassword): checks the
  *    current password, saves the new one, and Supabase signs out every
  *    other session while this one stays signed in.
@@ -37,6 +40,7 @@ import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../state/authContext';
+import { setAiConsent } from '../../lib/extractions';
 import { useFiling } from '../../state/filingContext';
 
 type ModalKey = 'compliance' | 'password' | 'identity' | 'sessions' | 'signOut';
@@ -121,7 +125,7 @@ function Row({
 }
 
 export default function ProfileScreen() {
-  const { user, profile, signOut, changePassword } = useAuth();
+  const { user, profile, signOut, changePassword, refreshProfile } = useAuth();
   const isIdentityVerified = profile?.identity_verified === true;
   const { filingHistory } = useFiling();
   const isCompliant = filingHistory.length > 0;
@@ -133,6 +137,25 @@ export default function ProfileScreen() {
   const [deadlineAlerts, setDeadlineAlerts] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  // AI reading consent: the saved choice, shown optimistically while saving.
+  const [aiConsentPending, setAiConsentPending] = useState<boolean | null>(null);
+  const [aiConsentToast, setAiConsentToast] = useState<string | null>(null);
+  const aiConsent = aiConsentPending ?? !!profile?.ai_consent_at;
+  const handleAiConsentChange = async (allow: boolean) => {
+    setAiConsentPending(allow);
+    const { error } = await setAiConsent(allow);
+    if (!error) {
+      await refreshProfile();
+    }
+    setAiConsentPending(null);
+    setAiConsentToast(
+      error
+        ? 'Couldn’t save that. Check your connection and try again.'
+        : allow
+          ? 'We’ll read the statements you upload and suggest your income.'
+          : 'AI reading is off. New statements won’t be read; you’ll type your income yourself.'
+    );
+  };
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -298,6 +321,21 @@ export default function ProfileScreen() {
                 onValueChange={setDeadlineAlerts}
                 trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor={colors.background}
+              />
+            }
+          />
+          <Row
+            icon="sparkles-outline"
+            label="Read statements with AI"
+            value="Suggests your income from the statements you upload"
+            right={
+              <Switch
+                value={aiConsent}
+                onValueChange={handleAiConsentChange}
+                disabled={aiConsentPending !== null}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.background}
+                accessibilityLabel="Read statements with AI"
               />
             }
           />
@@ -532,6 +570,12 @@ export default function ProfileScreen() {
         visible={signOutError !== null}
         message={signOutError ?? ''}
         onHide={() => setSignOutError(null)}
+      />
+      <Toast
+        key={aiConsentToast ?? 'none'}
+        visible={aiConsentToast !== null}
+        message={aiConsentToast ?? ''}
+        onHide={() => setAiConsentToast(null)}
       />
     </Screen>
   );

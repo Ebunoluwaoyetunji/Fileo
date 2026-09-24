@@ -111,7 +111,10 @@ function InProgressState({ draft }: { draft: Filing }) {
   const incomeDone =
     stepIndex(draft.currentStep) > stepIndex('income_summary') &&
     (missingItems
-      ? !has('income_amount') && !has('income_unconfirmed')
+      ? !has('income_amount') &&
+        !has('income_unconfirmed') &&
+        !has('ai_amount_unconfirmed') &&
+        !has('flagged_transactions')
       : !!draft.incomeConfirmedAt && draft.incomeSources.every((s) => s.amountKobo !== null));
   const deductionsDone = draft.currentStep === 'return_review';
 

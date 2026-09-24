@@ -161,6 +161,8 @@ export type MissingItem =
   | { type: 'income_sources' }
   | { type: 'income_amount'; platform: string }
   | { type: 'platform_document'; platform: string }
+  | { type: 'flagged_transactions'; platform: string; count: number }
+  | { type: 'ai_amount_unconfirmed'; platform: string }
   | { type: 'income_unconfirmed' }
   | { type: 'deduction_amount'; deduction_type: string }
   | { type: 'deduction_document'; deduction_type: string }
@@ -541,6 +543,23 @@ export function describeMissingItem(item: MissingItem): MissingItemDetails {
           name: platformDocumentLabel(item.platform),
           category: platformDocumentCategory(item.platform),
         },
+      };
+    case 'flagged_transactions':
+      return {
+        id: `flagged_transactions:${item.platform}`,
+        label:
+          item.count === 1
+            ? `1 transaction from ${item.platform} to review`
+            : `${item.count} transactions from ${item.platform} to review`,
+        step: 'income_summary',
+        focus: item.platform,
+      };
+    case 'ai_amount_unconfirmed':
+      return {
+        id: `ai_amount_unconfirmed:${item.platform}`,
+        label: `Check the amount we read for ${item.platform}`,
+        step: 'income_summary',
+        focus: item.platform,
       };
     case 'income_unconfirmed':
       return {
