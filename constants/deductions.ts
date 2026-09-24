@@ -5,12 +5,16 @@
  * required-document label, to list what's still missing without
  * duplicating this data in two places.
  */
+import type { DocumentCategory } from '../lib/documents';
+
 export type DeductionDefinition = {
   id: string;
   label: string;
   description: string;
   /** What "Upload your ___" should say for this category's required document. */
   documentLabel: string;
+  /** How the uploaded document is filed in the user's Documents. */
+  documentCategory: DocumentCategory;
   computeAmount: (totalIncome: number) => number;
 };
 
@@ -21,6 +25,7 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     description:
       'If you paid rent in 2025, you can deduct up to ₦500,000 from your taxable income. Potential saving is up to ₦75,000 off your tax bill.',
     documentLabel: 'rent receipt',
+    documentCategory: 'receipt',
     computeAmount: () => 500000,
   },
   {
@@ -29,6 +34,7 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     description:
       'Full premium paid on a life insurance policy. Document needed — insurance premium receipt from a registered insurer.',
     documentLabel: 'insurance premium receipt',
+    documentCategory: 'receipt',
     computeAmount: () => 0,
   },
   {
@@ -37,6 +43,7 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     description:
       'If you contributed up to 8% of your monthly gross income to a registered PFA. Document needed — annual PFA statement.',
     documentLabel: 'PFA statement',
+    documentCategory: 'other',
     computeAmount: (totalIncome) => Math.round(totalIncome * 0.08),
   },
   {
@@ -45,6 +52,7 @@ export const DEDUCTION_DEFINITIONS: DeductionDefinition[] = [
     description:
       '2.5% of monthly basic salary contributed to Federal Mortgage Bank. Document needed — NHF contribution statement.',
     documentLabel: 'NHF contribution statement',
+    documentCategory: 'other',
     computeAmount: (totalIncome) => Math.round(totalIncome * 0.025),
   },
 ];

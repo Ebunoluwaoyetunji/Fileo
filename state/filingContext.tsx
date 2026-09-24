@@ -70,17 +70,6 @@ export const MOCK_PRIOR_FILING: FilingHistoryEntry = {
   amountPaid: 142000,
 };
 
-/** ⚠️ Illustrative only, same reasoning as MOCK_PRIOR_FILING — the
- * "document" a real backend would eventually generate once a filing is
- * fully processed. Used by documents.tsx / document-detail.tsx. */
-export const MOCK_TAX_CLEARANCE_CERTIFICATE = {
-  id: 'mock-tax-clearance-certificate',
-  title: 'Tax clearance certificate 2025',
-  issuedAt: '2025-09-22T00:00:00.000Z',
-  description:
-    'Confirms your tax affairs are up to date with FIRS for the filing period. Some banks, contracts, and government agencies ask for this as proof of compliance.',
-};
-
 /** Distinguishes "never started" from "started but not yet submitted" —
  * the Filing tab's in-progress state (filing-history.tsx) needs this on
  * top of filingHistory to know which of its 3 states to show. */
@@ -89,7 +78,13 @@ export type FilingStatus = 'not-started' | 'in-progress';
 type FilingState = {
   filingStatus: FilingStatus;
   selectedPlatforms: string[];
+  /** Which upload slots are covered: platform names (Upload Documents) and
+   * deductionDocumentKey(id) (Deductions). */
   uploadedDocuments: string[];
+  /** The stored document (public.documents id) behind each covered slot,
+   * so "Change" can delete the old file once the new one is uploaded. A
+   * slot covered without a real file (the mock email link) has no entry. */
+  documentIdsByKey: Record<string, string>;
   incomeSources: IncomeSource[];
   deductions: Deduction[];
   filingHistory: FilingHistoryEntry[];
@@ -98,8 +93,10 @@ type FilingState = {
 type FilingContextValue = FilingState & {
   setSelectedPlatforms: (platforms: string[]) => void;
   togglePlatform: (platform: string) => void;
-  addUploadedDocument: (documentUri: string) => void;
-  removeUploadedDocument: (documentUri: string) => void;
+  addUploadedDocument: (key: string, documentId?: string) => void;
+  removeUploadedDocument: (key: string) => void;
+  /** Un-covers any slot backed by this document (after it's deleted). */
+  forgetDocument: (documentId: string) => void;
   setIncomeSources: (sources: IncomeSource[]) => void;
   setDeductions: (deductions: Deduction[]) => void;
   totalIncome: number;
@@ -113,6 +110,7 @@ const initialState: FilingState = {
   filingStatus: 'not-started',
   selectedPlatforms: [],
   uploadedDocuments: [],
+  documentIdsByKey: {},
   incomeSources: [],
   deductions: [],
   filingHistory: [],
@@ -144,17 +142,50 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       };
     });
 
-  const addUploadedDocument = (documentUri: string) =>
-    setState((prev) => ({
-      ...prev,
-      uploadedDocuments: [...prev.uploadedDocuments, documentUri],
-    }));
+  const addUploadedDocument = (key: string, documentId?: string) =>
+    setState((prev) => {
+      const documentIdsByKey = { ...prev.documentIdsByKey };
+      if (documentId) {
+        documentIdsByKey[key] = documentId;
+      } else {
+        delete documentIdsByKey[key];
+      }
+      return {
+        ...prev,
+        uploadedDocuments: prev.uploadedDocuments.includes(key)
+          ? prev.uploadedDocuments
+          : [...prev.uploadedDocuments, key],
+        documentIdsByKey,
+      };
+    });
 
-  const removeUploadedDocument = (documentUri: string) =>
-    setState((prev) => ({
-      ...prev,
-      uploadedDocuments: prev.uploadedDocuments.filter((uri) => uri !== documentUri),
-    }));
+  const removeUploadedDocument = (key: string) =>
+    setState((prev) => {
+      const documentIdsByKey = { ...prev.documentIdsByKey };
+      delete documentIdsByKey[key];
+      return {
+        ...prev,
+        uploadedDocuments: prev.uploadedDocuments.filter((item) => item !== key),
+        documentIdsByKey,
+      };
+    });
+
+  const forgetDocument = (documentId: string) =>
+    setState((prev) => {
+      const keys = Object.keys(prev.documentIdsByKey).filter(
+        (key) => prev.documentIdsByKey[key] === documentId
+      );
+      if (keys.length === 0) {
+        return prev;
+      }
+      const documentIdsByKey = { ...prev.documentIdsByKey };
+      keys.forEach((key) => delete documentIdsByKey[key]);
+      return {
+        ...prev,
+        uploadedDocuments: prev.uploadedDocuments.filter((item) => !keys.includes(item)),
+        documentIdsByKey,
+      };
+    });
 
   const setIncomeSources = (incomeSources: IncomeSource[]) =>
     setState((prev) => ({ ...prev, incomeSources }));
@@ -194,6 +225,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       togglePlatform,
       addUploadedDocument,
       removeUploadedDocument,
+      forgetDocument,
       setIncomeSources,
       setDeductions,
       totalIncome,

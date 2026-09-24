@@ -6,9 +6,14 @@
  * platforms" — so that heading is really just "needs a manual upload",
  * reproduced as-is rather than split by category.
  *
- * No real file picker or upload — "Upload" just marks that platform done
- * (stored as its name in FilingContext's `uploadedDocuments`, reused as a
- * plain "which platforms are covered" set rather than real file URIs).
+ * "Upload" / "Upload manually" pick a real file (or photo) and save it to
+ * the user's account (lib/documents: private storage + a documents row).
+ * The platform then counts as covered in FilingContext's
+ * `uploadedDocuments`, which also remembers the document's id so "Change"
+ * can upload a replacement and only then delete the old file.
+ *
+ * "Send upload link to my email" is still a mock (no email is sent): it
+ * marks the pending platforms as covered without any file.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -18,11 +23,17 @@ import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import {
+  UploadErrorRow,
+  UploadingRow,
+  useDocumentUploader,
+} from '../../components/documents/useDocumentUploader';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
-import { isNigerianBank } from '../../constants/platforms';
+import { isNigerianBank, PLATFORM_CATEGORIES } from '../../constants/platforms';
+import { DocumentCategory, deleteDocumentById } from '../../lib/documents';
 import { radii, spacing, typography } from '../../constants/theme';
 import { useFiling } from '../../state/filingContext';
 
@@ -41,11 +52,23 @@ function manualUploadDescription(platform: string): string {
     : 'Transaction report or income statement';
 }
 
+const NIGERIAN_FINTECHS =
+  PLATFORM_CATEGORIES.find((category) => category.title === 'Nigerian fintechs')?.platforms ?? [];
+
+/** Bank and Nigerian fintech statements are filed as bank statements;
+ * everything else (international platforms, creator earnings) as other. */
+function documentCategoryFor(platform: string): DocumentCategory {
+  return isNigerianBank(platform) || NIGERIAN_FINTECHS.includes(platform)
+    ? 'bank_statement'
+    : 'other';
+}
+
 export default function UploadDocumentsScreen() {
-  const { selectedPlatforms, uploadedDocuments, addUploadedDocument, removeUploadedDocument } =
+  const { selectedPlatforms, uploadedDocuments, documentIdsByKey, addUploadedDocument } =
     useFiling();
+  const uploader = useDocumentUploader();
   const [showEmailToast, setShowEmailToast] = useState(false);
-  const [showUploadToast, setShowUploadToast] = useState(false);
+  const [uploadToast, setUploadToast] = useState<string | null>(null);
 
   const bankPlatforms = selectedPlatforms.filter(isNigerianBank);
   const manualPlatforms = selectedPlatforms.filter((platform) => !isNigerianBank(platform));
@@ -53,27 +76,50 @@ export default function UploadDocumentsScreen() {
 
   const allCovered = pendingManualPlatforms.length === 0;
 
+  // Auto-pull banks land here too: auto-pull is informational, not a block
+  // on a manual upload the user chooses to do anyway (e.g. as a fallback).
   const handleUpload = (platform: string) => {
-    // Mock upload only — no file picker or real transfer. Auto-pull banks
-    // land here too: auto-pull is informational, not a block on a manual
-    // upload the user chooses to do anyway (e.g. as a fallback or a
-    // preference), so this always succeeds regardless of platform type.
-    addUploadedDocument(platform);
-    setShowUploadToast(true);
+    uploader.start({
+      key: platform,
+      source: 'upload_step',
+      category: documentCategoryFor(platform),
+      onUploaded: (document) => {
+        addUploadedDocument(platform, document.id);
+        setUploadToast('Document uploaded.');
+      },
+    });
   };
 
-  // Bank cards get a "Change" affordance (matching deductions.tsx's own
-  // upload/replace pattern) so a manual upload done for a bank can be
-  // undone/redone — auto-pull keeps covering it either way.
-  const handleRemoveManualUpload = (platform: string) => {
-    removeUploadedDocument(platform);
+  // Bank cards' "Change" (same pattern as deductions.tsx): upload the new
+  // file first; the old one is deleted only once the new one is saved, so
+  // cancelling or a failed upload keeps the current document.
+  const handleChangeManualUpload = (platform: string) => {
+    const previousId = documentIdsByKey[platform];
+    uploader.start({
+      key: platform,
+      source: 'upload_step',
+      category: documentCategoryFor(platform),
+      onUploaded: async (document) => {
+        addUploadedDocument(platform, document.id);
+        if (!previousId) {
+          setUploadToast('Document uploaded.');
+          return;
+        }
+        const { error } = await deleteDocumentById(previousId);
+        setUploadToast(
+          error
+            ? 'Document replaced. We couldn’t remove the old copy, so you can delete it from Documents.'
+            : 'Document replaced.'
+        );
+      },
+    });
   };
 
   const handleSendEmailLink = () => {
     // Mock-only escape hatch: treats "I'll do it later via email" as
     // satisfying the requirement for now, so the flow isn't stuck waiting
     // on an email nothing here can actually send.
-    pendingManualPlatforms.forEach(addUploadedDocument);
+    pendingManualPlatforms.forEach((platform) => addUploadedDocument(platform));
     setShowEmailToast(true);
   };
 
@@ -97,6 +143,7 @@ export default function UploadDocumentsScreen() {
             <Text style={styles.sectionTitle}>Nigerian accounts — auto pulled</Text>
             {bankPlatforms.map((bank) => {
               const isManuallyUploaded = uploadedDocuments.includes(bank);
+              const uploadState = uploader.slot(bank);
               return (
                 <Card key={bank} style={styles.bankCard}>
                   <View style={styles.bankHeader}>
@@ -123,7 +170,9 @@ export default function UploadDocumentsScreen() {
                       a fallback if auto-pull is wrong or incomplete). Once
                       done, this switches to a plain confirmation + "Change"
                       the same way deductions.tsx confirms a document. */}
-                  {isManuallyUploaded ? (
+                  {uploadState.status === 'uploading' ? (
+                    <UploadingRow />
+                  ) : isManuallyUploaded ? (
                     <View style={styles.manualUploadConfirmRow}>
                       <View style={styles.manualUploadConfirmLeft}>
                         <Ionicons name="checkmark-circle" size={18} color={colors.success} />
@@ -132,7 +181,7 @@ export default function UploadDocumentsScreen() {
                         </Text>
                       </View>
                       <Pressable
-                        onPress={() => handleRemoveManualUpload(bank)}
+                        onPress={() => handleChangeManualUpload(bank)}
                         hitSlop={8}
                         accessibilityRole="button"
                       >
@@ -146,6 +195,7 @@ export default function UploadDocumentsScreen() {
                       onPress={() => handleUpload(bank)}
                     />
                   )}
+                  <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(bank)} />
                 </Card>
               );
             })}
@@ -164,6 +214,7 @@ export default function UploadDocumentsScreen() {
             </View>
             {manualPlatforms.map((platform) => {
               const isUploaded = uploadedDocuments.includes(platform);
+              const uploadState = uploader.slot(platform);
               return (
                 <Card key={platform} style={styles.uploadCard}>
                   {isUploaded ? (
@@ -186,7 +237,12 @@ export default function UploadDocumentsScreen() {
                         label="Upload"
                         variant="dark"
                         onPress={() => handleUpload(platform)}
+                        loading={uploadState.status === 'uploading'}
                         style={styles.uploadButton}
+                      />
+                      <UploadErrorRow
+                        state={uploadState}
+                        onRetry={() => uploader.retry(platform)}
                       />
                     </>
                   )}
@@ -199,7 +255,7 @@ export default function UploadDocumentsScreen() {
 
       <Button
         label="Continue"
-        disabled={!allCovered}
+        disabled={!allCovered || uploader.isAnyUploading}
         onPress={() => router.push('/(app)/income-summary')}
         style={styles.continueButton}
       />
@@ -216,10 +272,12 @@ export default function UploadDocumentsScreen() {
         onHide={() => setShowEmailToast(false)}
       />
       <Toast
-        visible={showUploadToast}
-        message="Document uploaded."
-        onHide={() => setShowUploadToast(false)}
+        key={uploadToast ?? 'none'}
+        visible={uploadToast !== null}
+        message={uploadToast ?? ''}
+        onHide={() => setUploadToast(null)}
       />
+      {uploader.sheets}
     </Screen>
   );
 }

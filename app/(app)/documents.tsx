@@ -1,83 +1,201 @@
 /**
- * Documents — the screen behind the bottom nav's "Documents" tab, which
- * (like "File" before it) previously had no screen or onPress behind it.
+ * Documents — the screen behind the bottom nav's "Documents" tab: every
+ * document the user has uploaded (here, on Upload Documents or on
+ * Deductions), loaded from their account (public.documents), newest first.
+ * Reloads each time the tab is shown, so uploads from the filing flow
+ * appear straight away, and still there after a reinstall or on another
+ * phone.
  *
- * Two states, matching whether the user has any completed filing:
- *  - empty (no design given — built to fit the app's existing empty-state
- *    pattern, same shape as filing-history.tsx's not-started state):
- *    "No documents yet" + a way back to filing.
- *  - populated (the user's own design, for one specific document):
- *    ⚠️ there's no real document-generation pipeline — nothing here can
- *    produce a real tax clearance certificate from a filing. FilingContext
- *    only ever produces 'Submitted' filings (awaiting review), and a
- *    certificate is realistically something you'd only get once a filing
- *    is fully 'Filed'. Rather than fabricate one for the real (still
- *    "Submitted") entry, this list is driven by MOCK_PRIOR_FILING — the
- *    same illustrative already-processed past filing shown on the Filing
- *    tab's history state — paired with MOCK_TAX_CLEARANCE_CERTIFICATE
- *    (see filingContext.tsx). The *trigger* for showing this state is
- *    still real: filingHistory.length > 0, i.e. the user has actually
- *    completed at least one filing.
+ * States:
+ *  - loading / couldn't load (no design — spinner, and a "Try again");
+ *  - empty (same shape as before, copy now about uploads) with an
+ *    "Upload document" button;
+ *  - populated: the user's own card design, one card per document
+ *    (name, category, date, size), tapping through to document-detail.
+ *
+ * Uploading here asks "What is this document?" after the file is picked
+ * (see useDocumentUploader), and files it under the current tax year.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  UploadErrorRow,
+  UploadingRow,
+  useDocumentUploader,
+} from '../../components/documents/useDocumentUploader';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
 import { Screen } from '../../components/layout/Screen';
+import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
-import { MOCK_TAX_CLEARANCE_CERTIFICATE, useFiling } from '../../state/filingContext';
+import {
+  categoryLabel,
+  DocumentRecord,
+  formatFileSize,
+  listDocuments,
+} from '../../lib/documents';
+
+const UPLOAD_KEY = 'documents-tab';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export default function DocumentsScreen() {
-  const { filingHistory } = useFiling();
-  const hasFilings = filingHistory.length > 0;
+  const uploader = useDocumentUploader();
+  const [documents, setDocuments] = useState<DocumentRecord[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  return (
-    <Screen style={styles.screen}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Documents</Text>
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listDocuments();
+    setIsLoading(false);
+    if (result.error) {
+      setLoadError(result.error.message);
+      return;
+    }
+    setLoadError(null);
+    setDocuments(result.documents);
+  }, []);
 
-        {hasFilings ? (
-          <>
-            <Text style={styles.subtitle}>Available to download</Text>
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  const handleUpload = () => {
+    uploader.start({
+      key: UPLOAD_KEY,
+      source: 'documents_tab',
+      category: 'ask',
+      onUploaded: (document) => {
+        setDocuments((prev) => [document, ...(prev ?? []).filter((d) => d.id !== document.id)]);
+        setToastMessage('Document uploaded.');
+      },
+    });
+  };
+
+  const uploadState = uploader.slot(UPLOAD_KEY);
+  const isUploading = uploadState.status === 'uploading';
+
+  let body;
+  if (documents === null && isLoading) {
+    body = (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  } else if (documents === null) {
+    body = (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyTitle}>Couldn&apos;t load your documents</Text>
+        <Text style={styles.emptyBody}>{loadError ?? 'Please try again.'}</Text>
+        <Button label="Try again" variant="secondary" onPress={load} style={styles.emptyButton} />
+      </View>
+    );
+  } else if (documents.length === 0 && !isUploading) {
+    body = (
+      <View style={styles.emptyState}>
+        <View style={styles.emptyIconCircle}>
+          <Ionicons name="folder-outline" size={32} color={colors.textSecondary} />
+        </View>
+        <Text style={styles.emptyTitle}>No documents yet</Text>
+        <Text style={styles.emptyBody}>
+          Bank statements, payslips, invoices and receipts you upload are saved here, safely in
+          your account.
+        </Text>
+        <Button
+          label="Upload document"
+          variant="dark"
+          onPress={handleUpload}
+          style={styles.emptyButton}
+        />
+        <UploadErrorRow state={uploadState} onRetry={() => uploader.retry(UPLOAD_KEY)} />
+      </View>
+    );
+  } else {
+    body = (
+      <>
+        <Text style={styles.subtitle}>Saved to your account</Text>
+        <Button
+          label="Upload document"
+          variant="dark"
+          onPress={handleUpload}
+          loading={isUploading}
+          style={styles.uploadButton}
+        />
+        <UploadErrorRow
+          state={uploadState}
+          onRetry={() => uploader.retry(UPLOAD_KEY)}
+          style={styles.uploadError}
+        />
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {isUploading ? (
+            <Card style={styles.docCard}>
+              <UploadingRow />
+            </Card>
+          ) : null}
+          {(documents ?? []).map((document) => (
             <Pressable
-              onPress={() => router.push('/(app)/document-detail')}
+              key={document.id}
+              onPress={() =>
+                router.push({ pathname: '/(app)/document-detail', params: { id: document.id } })
+              }
               accessibilityRole="button"
             >
               <Card style={styles.docCard}>
                 <View style={styles.docIconCircle}>
-                  <Ionicons name="document-text-outline" size={22} color={colors.primaryDark} />
+                  <Ionicons
+                    name={document.mime_type.startsWith('image/') ? 'image-outline' : 'document-text-outline'}
+                    size={22}
+                    color={colors.primaryDark}
+                  />
                 </View>
                 <View style={styles.docTextWrap}>
-                  <Text style={styles.docTitle}>{MOCK_TAX_CLEARANCE_CERTIFICATE.title}</Text>
-                  <Text style={styles.docMeta}>
-                    Issued {formatDate(MOCK_TAX_CLEARANCE_CERTIFICATE.issuedAt)}
+                  <Text style={styles.docTitle} numberOfLines={1}>
+                    {document.file_name}
+                  </Text>
+                  <Text style={styles.docMeta} numberOfLines={1}>
+                    {categoryLabel(document.category)} · {formatDate(document.created_at)} ·{' '}
+                    {formatFileSize(document.size_bytes)}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </Card>
             </Pressable>
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="folder-outline" size={32} color={colors.textSecondary} />
-            </View>
-            <Text style={styles.emptyTitle}>No documents yet</Text>
-            <Text style={styles.emptyBody}>
-              Once a filing is complete, documents like your tax clearance certificate will show up
-              here.
-            </Text>
-          </View>
-        )}
+          ))}
+        </ScrollView>
+      </>
+    );
+  }
+
+  return (
+    <Screen style={styles.screen}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Documents</Text>
+        {body}
       </View>
 
       <BottomTabBar active="documents" />
+
+      <Toast
+        key={toastMessage ?? 'none'}
+        visible={toastMessage !== null}
+        message={toastMessage ?? ''}
+        onHide={() => setToastMessage(null)}
+      />
+      {uploader.sheets}
     </Screen>
   );
 }
@@ -102,10 +220,24 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },
+  uploadButton: {
+    marginBottom: spacing.md,
+  },
+  uploadError: {
+    marginTop: 0,
+    marginBottom: spacing.md,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: spacing.lg,
+  },
   docCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   docIconCircle: {
     width: 44,
@@ -126,6 +258,11 @@ const styles = StyleSheet.create({
   docMeta: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
     flex: 1,
@@ -153,5 +290,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     paddingHorizontal: spacing.lg,
+  },
+  emptyButton: {
+    marginTop: spacing.lg,
+    alignSelf: 'stretch',
   },
 });

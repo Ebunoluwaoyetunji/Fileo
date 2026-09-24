@@ -3,17 +3,20 @@
  * deduction categories (Rent, Life assurance, Pension, NHF), each with a
  * description of eligibility and what document it needs. A toggled-on
  * category gets a highlighted border and a document-upload prompt (also
- * from the frame) — mock upload only, marks that category's document as
- * provided in FilingContext's `uploadedDocuments` (reusing the same field
+ * from the frame). The prompt picks a real file (or photo) and saves it to
+ * the user's account (lib/documents), then marks that category's document
+ * as provided in FilingContext's `uploadedDocuments` (the same field
  * Upload Documents uses for platforms, namespaced with a "deduction:"
- * prefix so the two don't collide).
+ * prefix so the two don't collide), remembering the document's id.
  *
  * Two behaviors have no Figma frame to match, so they're built to fit the
  * existing patterns instead:
  *  - Once a document is uploaded, a "Change" link (same link style as
- *    "Resend code" / "Send upload link to my email" elsewhere) swaps it
- *    back to the upload prompt so it can be replaced — mock only, same as
- *    the upload itself.
+ *    "Resend code" / "Send upload link to my email" elsewhere) uploads a
+ *    replacement; the old file is deleted only after the new one is saved,
+ *    so cancelling or a failed upload keeps the current document.
+ *  - While uploading, the prompt shows "Uploading…"; a failed upload shows
+ *    its error under the prompt, with "Try again" when that can help.
  *  - Toggling a category on without uploading its document blocks
  *    Continue, showing an inline error on that category's upload prompt —
  *    same red-border-plus-caption pattern TextField uses for its own
@@ -42,14 +45,23 @@ import { Screen } from '../../components/layout/Screen';
 import { BackButton } from '../../components/ui/BackButton';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Toast } from '../../components/ui/Toast';
+import {
+  UploadErrorRow,
+  UploadingRow,
+  useDocumentUploader,
+} from '../../components/documents/useDocumentUploader';
 import { colors } from '../../constants/colors';
 import { DEDUCTION_DEFINITIONS, deductionDocumentKey as documentKey } from '../../constants/deductions';
 import { radii, spacing, typography } from '../../constants/theme';
+import { deleteDocumentById } from '../../lib/documents';
 import { useFiling } from '../../state/filingContext';
 
 export default function DeductionsScreen() {
-  const { totalIncome, setDeductions, uploadedDocuments, addUploadedDocument, removeUploadedDocument } =
+  const { totalIncome, setDeductions, uploadedDocuments, documentIdsByKey, addUploadedDocument } =
     useFiling();
+  const uploader = useDocumentUploader();
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   // Set on the first Continue attempt; once true, each card's error is
   // derived live from current state, so it clears itself the moment that
@@ -73,17 +85,35 @@ export default function DeductionsScreen() {
   };
 
   const handleUploadDocument = (id: string) => {
-    // Mock upload only — no real file picker or transfer.
-    addUploadedDocument(documentKey(id));
-  };
-
-  const handleChangeDocument = (id: string) => {
-    // Mock "replace" — drops the current document so the upload prompt
-    // reappears; tapping it again produces a new mock upload.
-    removeUploadedDocument(documentKey(id));
+    const definition = DEDUCTION_DEFINITIONS.find((d) => d.id === id);
+    const key = documentKey(id);
+    // Captured now: the document this upload replaces, if any.
+    const previousId = documentIdsByKey[key];
+    uploader.start({
+      key,
+      source: 'deductions',
+      category: definition?.documentCategory ?? 'other',
+      onUploaded: async (document) => {
+        addUploadedDocument(key, document.id);
+        if (!previousId) {
+          setToastMessage('Document uploaded.');
+          return;
+        }
+        // Only now that the new one is saved.
+        const { error } = await deleteDocumentById(previousId);
+        setToastMessage(
+          error
+            ? 'Document replaced. We couldn’t remove the old copy, so you can delete it from Documents.'
+            : 'Document replaced.'
+        );
+      },
+    });
   };
 
   const handleContinue = () => {
+    if (uploader.isAnyUploading) {
+      return;
+    }
     const hasMissingDocument = DEDUCTION_DEFINITIONS.some(
       (d) => enabled[d.id] && !uploadedDocuments.includes(documentKey(d.id))
     );
@@ -114,7 +144,9 @@ export default function DeductionsScreen() {
         {DEDUCTION_DEFINITIONS.map((deduction) => {
           const isEnabled = !!enabled[deduction.id];
           const isUploaded = uploadedDocuments.includes(documentKey(deduction.id));
-          const showError = hasAttemptedContinue && isEnabled && !isUploaded;
+          const uploadState = uploader.slot(documentKey(deduction.id));
+          const isUploading = uploadState.status === 'uploading';
+          const showError = hasAttemptedContinue && isEnabled && !isUploaded && !isUploading;
 
           return (
             <Card
@@ -133,14 +165,18 @@ export default function DeductionsScreen() {
               <Text style={styles.deductionDescription}>{deduction.description}</Text>
 
               {isEnabled ? (
-                isUploaded ? (
+                isUploading ? (
+                  <View style={styles.uploadingWrap}>
+                    <UploadingRow />
+                  </View>
+                ) : isUploaded ? (
                   <View style={styles.uploadedRow}>
                     <View style={styles.uploadedLeft}>
                       <Ionicons name="checkmark-circle" size={18} color={colors.success} />
                       <Text style={styles.uploadedText}>Document uploaded</Text>
                     </View>
                     <Pressable
-                      onPress={() => handleChangeDocument(deduction.id)}
+                      onPress={() => handleUploadDocument(deduction.id)}
                       hitSlop={8}
                       accessibilityRole="button"
                     >
@@ -172,12 +208,31 @@ export default function DeductionsScreen() {
                   </>
                 )
               ) : null}
+              {isEnabled ? (
+                <UploadErrorRow
+                  state={uploadState}
+                  onRetry={() => uploader.retry(documentKey(deduction.id))}
+                />
+              ) : null}
             </Card>
           );
         })}
       </ScrollView>
 
-      <Button label="Continue" onPress={handleContinue} style={styles.continueButton} />
+      <Button
+        label="Continue"
+        onPress={handleContinue}
+        disabled={uploader.isAnyUploading}
+        style={styles.continueButton}
+      />
+
+      <Toast
+        key={toastMessage ?? 'none'}
+        visible={toastMessage !== null}
+        message={toastMessage ?? ''}
+        onHide={() => setToastMessage(null)}
+      />
+      {uploader.sheets}
     </Screen>
   );
 }
@@ -257,6 +312,9 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.danger,
     marginTop: spacing.xs,
+  },
+  uploadingWrap: {
+    marginTop: spacing.md,
   },
   uploadedRow: {
     flexDirection: 'row',

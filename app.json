@@ -29,6 +29,14 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Fileo needs access to your photos so you can upload receipts and statements.",
+          "cameraPermission": "Fileo uses your camera so you can photograph receipts and documents to upload.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
