@@ -1,6 +1,6 @@
 /**
  * Animated splash — plays once per app launch, straight after the native
- * splash, then fades away to reveal whatever screen the app routed to
+ * splash, then zooms through the O into whatever screen the app routed to
  * (onboarding, sign in or Home).
  *
  * Hand-off: the native splash (app.json → expo-splash-screen) is plain navy
@@ -18,16 +18,26 @@
  *   4. from the O the ball makes one small hop into the O's centre and
  *      shrinks away inside it
  *   5. the whole word does a quick "heartbeat" (up to 1.08 and back)
- *   6. a short hold, then the splash fades out — but only once BOTH the
- *      sequence has played AND `ready` is true (the auth session has
- *      loaded). If loading takes longer it holds on the final frame; nothing
- *      loops.
- * With the system "reduce motion" setting on: no ball, the letters simply
- * fade in together, hold, and the splash fades out.
+ *   6. the zoom — but only once BOTH the sequence has played AND `ready` is
+ *      true (the auth session has loaded); if loading takes longer it holds
+ *      on the logo, nothing loops:
+ *        - F, I, L and E fade out, drifting away from the O
+ *        - the O (inner shape and all) grows, ease-in, heading for the
+ *          middle of the solid white wedge in its lower right, until that
+ *          white covers the whole screen
+ *        - the now-white screen cross-fades into the next screen
+ * With the system "reduce motion" setting on: no ball and no zoom, the
+ * letters simply fade in together, hold, and the splash fades out.
  *
  * The letters are the wordmark's own SVG paths, one per letter (see
- * FileoWordmark), each drawn in the full wordmark viewBox — so the final
- * frame is exactly the logo.
+ * FileoWordmark), each drawn in the full wordmark viewBox — so the logo
+ * frame before the zoom is exactly the wordmark.
+ *
+ * Sharpness: an SVG is drawn once at its laid-out size, so scaling it up
+ * blurs it (notably on Android). The O is therefore also drawn at 4x and 16x
+ * its size and scaled down to match; as the zoom passes each size, that copy
+ * takes over, so the O's edges stay crisp while they're on screen. The last
+ * frame of the zoom is one solid colour.
  *
  * Every movement is worked out once here, in JavaScript, as keyframes on a
  * single timeline, then played by the native driver (React Native's
@@ -37,7 +47,7 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { splashLayout } from '../constants/theme';
@@ -63,16 +73,19 @@ const LETTER_RECOVER_MS = 200;
 const LETTER_LIGHT_MS = 160;
 /** The word's "heartbeat" at the end (up and back). */
 const HEARTBEAT_MS = 400;
-/** Hold on the finished logo before fading out. */
-const HOLD_MS = 250;
-/** Whole splash fades out. */
-const FADE_OUT_MS = 250;
+/** Zoom: F, I, L and E fade out (and drift) as the O starts to grow. */
+const LETTERS_OUT_MS = 150;
+/** Zoom: the O grows until it fills the screen (ease-in). */
+const ZOOM_MS = 650;
+/** Zoom: the filled screen cross-fades into the next screen. */
+const CROSSFADE_MS = 200;
 /** Reduce motion: letters fade in together, hold, fade out. */
 const REDUCED_FADE_IN_MS = 250;
 const REDUCED_HOLD_MS = 300;
 const REDUCED_FADE_OUT_MS = 200;
-// Total with defaults: 100 + 320 + 5×60 + 4×220 + 260 + 400 + 250 = 2,510 ms,
-// then the 250 ms fade-out (plus any wait for the session to load).
+// Total with defaults: 100 + 320 + 5×60 + 4×220 + 260 + 400 = 2,260 ms of
+// bouncing ball, then 650 ms zoom + 200 ms cross-fade = 3,110 ms (plus any
+// wait for the session to load, spent holding on the logo).
 
 // ─── Amounts and look — tweak here ───────────────────────────────────────────
 /** Letters before the ball lands on them. */
@@ -97,6 +110,24 @@ const LETTER_DIP = 3.5;
 const LETTER_SPRING = 1.2; // Easing.back amount: ~0.3pt overshoot
 /** Heartbeat peak scale. */
 const HEARTBEAT_SCALE = 1.08;
+/** How far F, I, L and E drift left, away from the O, as they fade (pt). */
+const LETTERS_DRIFT = 12;
+/** Where the zoom heads, in the wordmark's viewBox: the middle of the solid
+ * white wedge in the O's lower right — the biggest solid area in the letter
+ * (a circle of radius ZOOM_TARGET_RADIUS fits in it) — so the zoom ends on
+ * plain letter colour. The O's exact centre (122.7, 17.5) is right at the
+ * tip of the navy tongue, which would end on a ragged edge. (To end on navy
+ * instead — through the O's counter — use { x: 120.5, y: 9.15 }, radius 7.7.) */
+const ZOOM_TARGET = { x: 131.8, y: 25.5 };
+const ZOOM_TARGET_RADIUS = 5.3;
+/** Final scale: the O grows until that circle covers the whole screen,
+ * corner to corner, times this margin — about 92x on a 390×844 phone (worked
+ * out from the screen size, so bigger screens are covered too). */
+const ZOOM_FINAL_SCALE_MARGIN = 1.05;
+/** Extra copies of the O drawn at these sizes (× the wordmark's), each
+ * taking over halfway (geometrically) from the previous one, so the O is
+ * never shown enlarged more than 2x until it's 32x its size. */
+const ZOOM_DETAIL_SCALES = [4, 16];
 
 // ─── Geometry (wordmark viewBox units: 141 × 35) ─────────────────────────────
 const LOGO_WIDTH = splashLayout.logoWidth;
@@ -114,6 +145,10 @@ const LANDING = [
 ].map((p) => ({ x: p.x * UNIT, y: p.top * UNIT - BALL_SIZE / 2 }));
 /** The O's centre, where the ball ends up. */
 const O_CENTRE = { x: 122.7 * UNIT, y: 17.5 * UNIT };
+/** The SVG is drawn at UNIT scale ("meet"), centred vertically. */
+const OFFSET_Y = (LOGO_HEIGHT - 35 * UNIT) / 2;
+/** The O's bounding box (viewBox units). */
+const O_BOX = { x: 104.693, y: 0, width: 36.072, height: 34.992 };
 
 // ─── The timeline ────────────────────────────────────────────────────────────
 const DROP_START = START_DELAY_MS;
@@ -121,7 +156,7 @@ const impactAt = (k: number) => DROP_START + DROP_MS + k * (CONTACT_MS + HOP_MS)
 const FINAL_HOP_START = impactAt(4) + CONTACT_MS;
 const BALL_GONE = FINAL_HOP_START + FINAL_HOP_MS;
 const HEARTBEAT_START = BALL_GONE;
-const SEQUENCE_MS = HEARTBEAT_START + HEARTBEAT_MS + HOLD_MS;
+const SEQUENCE_MS = HEARTBEAT_START + HEARTBEAT_MS;
 const REDUCED_SEQUENCE_MS = REDUCED_FADE_IN_MS + REDUCED_HOLD_MS;
 
 const easeIn = Easing.in(Easing.quad);
@@ -261,11 +296,83 @@ const TRACKS = {
 
 const LETTER_XML = LETTERS.map((letter) => buildWordmarkXml(FILEO_WORDMARK_COLOR, [FILEO_LETTER_PATHS[letter]]));
 
+// ─── The zoom ────────────────────────────────────────────────────────────────
+/** The O on its own, cropped to its bounding box, for the large copies. */
+const O_ONLY_XML = `<svg width="${O_BOX.width}" height="${O_BOX.height}" viewBox="${O_BOX.x} ${O_BOX.y} ${O_BOX.width} ${O_BOX.height}" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="${FILEO_LETTER_PATHS.O}" fill="${FILEO_WORDMARK_COLOR}"/></svg>`;
+
+/** A copy of the O drawn `detail` times larger, then scaled down by the same
+ * factor around its centre so it sits exactly on the wordmark's O. */
+function detailBox(detail: number) {
+  const width = O_BOX.width * UNIT * detail;
+  const height = O_BOX.height * UNIT * detail;
+  const centreX = (O_BOX.x + O_BOX.width / 2) * UNIT;
+  const centreY = (O_BOX.y + O_BOX.height / 2) * UNIT + OFFSET_Y;
+  return {
+    position: 'absolute' as const,
+    left: centreX - width / 2,
+    top: centreY - height / 2,
+    width,
+    height,
+    transform: [{ scale: 1 / detail }],
+  };
+}
+const DETAIL_BOXES = ZOOM_DETAIL_SCALES.map(detailBox);
+
+type Track = { inputRange: number[]; outputRange: number[] };
+/** 0 before `at`, 1 after (or the other way round). */
+const step = (at: number, from: number, to: number): Track => ({
+  inputRange: [0, Math.max(0, at - 1), Math.max(0, at - 1) + 0.01, ZOOM_MS + 1],
+  outputRange: [from, from, to, to],
+});
+
+/** The zoom's keyframes for a screen of this size. Everything moves around
+ * the logo's centre, which is the screen's centre. */
+function zoomTracks(screenWidth: number, screenHeight: number) {
+  const halfDiagonal = Math.hypot(screenWidth, screenHeight) / 2;
+  const finalScale = Math.max(2, (halfDiagonal / (ZOOM_TARGET_RADIUS * UNIT)) * ZOOM_FINAL_SCALE_MARGIN);
+  // The target, relative to the screen's centre, before the zoom.
+  const target = {
+    x: ZOOM_TARGET.x * UNIT - LOGO_WIDTH / 2,
+    y: ZOOM_TARGET.y * UNIT + OFFSET_Y - LOGO_HEIGHT / 2,
+  };
+  // Ease-in on a log scale: every doubling of size takes less time than the
+  // last, so it starts slow and plunges.
+  const scaleAt = (t: number) => Math.pow(finalScale, easeIn(progress(t, 0, ZOOM_MS)));
+  const timeAtScale = (s: number) => ZOOM_MS * Math.sqrt(Math.log(s) / Math.log(finalScale)); // inverse of easeIn (quad)
+  // The target glides to the screen's centre as the O grows around it.
+  const glide = (t: number) => 1 - easeInOut(progress(t, 0, ZOOM_MS));
+  const lettersOut = (t: number) => easeOut(progress(t, 0, LETTERS_OUT_MS));
+  // Each larger copy of the O takes over at the geometric midpoint between
+  // its size and the previous one's (4x at 2x, 16x at 8x).
+  const sizes = [1, ...ZOOM_DETAIL_SCALES];
+  const handOver = sizes.slice(1).map((size, i) => timeAtScale(Math.sqrt(size * sizes[i])));
+  return {
+    scale: keyframes(scaleAt, ZOOM_MS),
+    translateX: keyframes((t) => target.x * glide(t) - scaleAt(t) * target.x, ZOOM_MS),
+    translateY: keyframes((t) => target.y * glide(t) - scaleAt(t) * target.y, ZOOM_MS),
+    lettersOpacity: keyframes((t) => 1 - lettersOut(t), ZOOM_MS),
+    lettersDrift: keyframes((t) => -LETTERS_DRIFT * lettersOut(t), ZOOM_MS),
+    // The wordmark's own O, then each larger copy in turn.
+    oOpacity: [
+      step(handOver[0], 1, 0),
+      ...handOver.map((at, i) => {
+        const off = handOver[i + 1];
+        const on = step(at, 0, 1);
+        if (off === undefined) return on;
+        return {
+          inputRange: [...on.inputRange.slice(0, 3), off, off + 0.01, ZOOM_MS + 1],
+          outputRange: [0, 0, 1, 1, 0, 0],
+        };
+      }),
+    ],
+  };
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 type Props = {
   /** True once the app knows where to go (auth session loaded). */
   ready: boolean;
-  /** Called after the fade-out, so the overlay can be removed. */
+  /** Called once the next screen is showing, so the overlay can be removed. */
   onFinish: () => void;
 };
 
@@ -281,12 +388,16 @@ const reduceMotionCheck = AccessibilityInfo.isReduceMotionEnabled()
 
 export function AnimatedSplash({ ready, onFinish }: Props) {
   const timeline = useRef(new Animated.Value(0)).current;
+  const zoom = useRef(new Animated.Value(0)).current;
   const splashOpacity = useRef(new Animated.Value(1)).current;
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   // Always starts unknown (plain navy) and is filled in after mount, so a
   // pre-rendered web page and the live app render the same first frame.
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
   const [sequenceDone, setSequenceDone] = useState(false);
-  const [fadingOut, setFadingOut] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  // The screen is covered in the (light) letter colour: dark status bar.
+  const [covered, setCovered] = useState(false);
   const nativeHidden = useRef(false);
 
   useEffect(() => {
@@ -334,35 +445,67 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
     return () => animation.stop();
   }, [reduceMotion, timeline]);
 
-  // Fade out when both the sequence has played and the app is ready.
+  // Leave once both the sequence has played and the app is ready: zoom
+  // through the O, then cross-fade (reduce motion: just fade out).
   useEffect(() => {
-    if (!sequenceDone || !ready || fadingOut) {
+    if (!sequenceDone || !ready || leaving) {
       return;
     }
-    setFadingOut(true);
-    Animated.timing(splashOpacity, {
-      toValue: 0,
-      duration: reduceMotion ? REDUCED_FADE_OUT_MS : FADE_OUT_MS,
-      easing: Easing.out(Easing.quad),
+    setLeaving(true);
+    const fadeOut = (duration: number) =>
+      Animated.timing(splashOpacity, {
+        toValue: 0,
+        duration,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start(() => onFinish());
+    if (reduceMotion) {
+      fadeOut(REDUCED_FADE_OUT_MS);
+      return;
+    }
+    Animated.timing(zoom, {
+      toValue: ZOOM_MS,
+      duration: ZOOM_MS,
+      easing: Easing.linear, // the keyframes carry all the easing
       useNativeDriver: true,
-    }).start(() => onFinish());
-  }, [sequenceDone, ready, fadingOut, reduceMotion, splashOpacity, onFinish]);
+    }).start(() => {
+      setCovered(true);
+      fadeOut(CROSSFADE_MS);
+    });
+  }, [sequenceDone, ready, leaving, reduceMotion, zoom, splashOpacity, onFinish]);
+
+  const zoomKeyframes = useMemo(() => zoomTracks(screenWidth, screenHeight), [screenWidth, screenHeight]);
 
   const animated = useMemo(() => {
-    const track = (k: { inputRange: number[]; outputRange: number[] }) =>
-      timeline.interpolate({ ...k, extrapolate: 'clamp' });
+    const track = (k: Track) => timeline.interpolate({ ...k, extrapolate: 'clamp' });
+    const zoomTrack = (k: Track) => zoom.interpolate({ ...k, extrapolate: 'clamp' });
     if (reduceMotion) {
       const fadeIn = timeline.interpolate({
         inputRange: [0, REDUCED_FADE_IN_MS],
         outputRange: [0, 1],
         extrapolate: 'clamp',
       });
-      return { letterOpacity: LETTERS.map(() => fadeIn), letterDip: null, wordScale: null, ball: null };
+      return { letterOpacity: LETTERS.map(() => fadeIn), letterDip: null, letterDrift: null, wordScale: null, zoom: null, ball: null };
     }
+    const lettersOut = zoomTrack(zoomKeyframes.lettersOpacity);
+    const [wordmarkO, ...detailO] = zoomKeyframes.oOpacity.map(zoomTrack);
     return {
-      letterOpacity: TRACKS.letterOpacity.map(track),
+      // F, I, L, E fade out with the zoom; the wordmark's O hands over to its
+      // larger copies.
+      letterOpacity: TRACKS.letterOpacity.map((k, i) =>
+        Animated.multiply(track(k), LETTERS[i] === 'O' ? wordmarkO : lettersOut)
+      ),
       letterDip: TRACKS.letterDip.map(track),
+      letterDrift: zoomTrack(zoomKeyframes.lettersDrift),
       wordScale: track(TRACKS.wordScale),
+      zoom: {
+        transform: [
+          { translateX: zoomTrack(zoomKeyframes.translateX) },
+          { translateY: zoomTrack(zoomKeyframes.translateY) },
+          { scale: zoomTrack(zoomKeyframes.scale) },
+        ],
+        detailOpacity: detailO,
+      },
       ball: {
         opacity: track(TRACKS.ballOpacity),
         transform: [
@@ -373,17 +516,17 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
         ],
       },
     };
-  }, [reduceMotion, timeline]);
+  }, [reduceMotion, timeline, zoom, zoomKeyframes]);
 
   return (
     <Animated.View
       style={[styles.container, { opacity: splashOpacity }]}
-      pointerEvents={fadingOut ? 'none' : 'auto'}
+      pointerEvents={leaving ? 'none' : 'auto'}
       onLayout={handleLayout}
       accessible
       accessibilityLabel="Fileo"
     >
-      <StatusBar style="light" />
+      <StatusBar style={covered ? 'dark' : 'light'} />
       {/* Until we know about reduce motion the screen is plain navy — which
           looks the same, since the letters start invisible. */}
       {reduceMotion !== null ? (
@@ -391,20 +534,40 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
           <Animated.View
             style={[styles.fill, animated.wordScale ? { transform: [{ scale: animated.wordScale }] } : null]}
           >
-            {LETTERS.map((letter, k) => (
-              <Animated.View
-                key={letter}
-                style={[
-                  styles.fill,
-                  {
-                    opacity: animated.letterOpacity[k],
-                    transform: animated.letterDip ? [{ translateY: animated.letterDip[k] }] : [],
-                  },
-                ]}
-              >
-                <SvgXml xml={LETTER_XML[k]} width={LOGO_WIDTH} height={LOGO_HEIGHT} />
-              </Animated.View>
-            ))}
+            {LETTERS.map((letter, k) => {
+              const view = (
+                <Animated.View
+                  key={letter}
+                  style={[
+                    styles.fill,
+                    {
+                      opacity: animated.letterOpacity[k],
+                      transform: [
+                        ...(animated.letterDrift && letter !== 'O' ? [{ translateX: animated.letterDrift }] : []),
+                        ...(animated.letterDip ? [{ translateY: animated.letterDip[k] }] : []),
+                      ],
+                    },
+                  ]}
+                >
+                  <SvgXml xml={LETTER_XML[k]} width={LOGO_WIDTH} height={LOGO_HEIGHT} />
+                </Animated.View>
+              );
+              if (letter !== 'O' || !animated.zoom) {
+                return view;
+              }
+              // The O and its larger copies, zooming together.
+              const { transform, detailOpacity } = animated.zoom;
+              return (
+                <Animated.View key={letter} style={[styles.fill, { transform }]}>
+                  {view}
+                  {DETAIL_BOXES.map((box, i) => (
+                    <Animated.View key={i} style={[box, { opacity: detailOpacity[i] }]}>
+                      <SvgXml xml={O_ONLY_XML} width={box.width} height={box.height} />
+                    </Animated.View>
+                  ))}
+                </Animated.View>
+              );
+            })}
           </Animated.View>
           {animated.ball ? <Animated.View style={[styles.ball, animated.ball]} /> : null}
         </View>

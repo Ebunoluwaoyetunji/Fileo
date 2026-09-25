@@ -7,12 +7,12 @@
 //   fileo-splash-4x5.mp4   1080x1350, H.264 / yuv420p, 60fps (LinkedIn feed)
 //   fileo-splash-1x1.mp4   1080x1080, same encoding
 //   fileo-splash.gif       720px wide (4:5), 30fps
-//   fileo-splash-still.png the final frame, for checking the look
+//   fileo-splash-still.png a frame from the middle of the zoom through the O
 //
-// Sequence: plain navy (as the native splash) → the splash at real speed →
-// the first frame of the next screen (signed-out onboarding) → crossfade →
-// the splash again at 0.5x with a "0.5x" label (ball bouncing across FILEO)
-// → hold on the final logo.
+// Sequence: plain navy (as the native splash) → the splash at real speed
+// (ball bouncing across FILEO, zoom through the O) → the next screen
+// (signed-out onboarding) → crossfade to navy → the splash again at 0.5x
+// with a "0.5x" label → hold on the next screen.
 //
 // Needs: Node 18+, Playwright (npm i -D playwright; npx playwright install
 // chromium) and ffmpeg on the PATH (or FFMPEG=/path/to/ffmpeg). Builds the
@@ -37,7 +37,7 @@ const NEXT_SCREEN_HOLD_S = 1.2; // first frame of the next screen, incl. the pau
 const CROSSFADE_S = 0.5; // next screen → navy before the slow run
 const SLOW_SPEED = 0.5; // second run
 const SLOW_LEAD_IN_S = 0.2;
-const FINAL_HOLD_S = 1.2; // final logo at the end
+const FINAL_HOLD_S = 1.2; // next screen at the end
 const LABEL_FADE_S = 0.25;
 const NEXT_SCREEN_ROUTE = '/step-1'; // signed-out onboarding, no personal data
 const GIF_WIDTH = 720;
@@ -108,7 +108,7 @@ function startServer() {
 }
 
 // ─── 2. Capture the splash frame by frame ────────────────────────────────────
-async function captureRun(browser, base, { speed, name, stopAtFinalFrame }) {
+async function captureRun(browser, base, { speed, name }) {
   const dir = path.join(work, name);
   fs.mkdirSync(dir);
   const context = await browser.newContext({ viewport: APP_VIEWPORT, deviceScaleFactor: APP_SCALE, reducedMotion: 'no-preference' });
@@ -123,14 +123,17 @@ async function captureRun(browser, base, { speed, name, stopAtFinalFrame }) {
   const state = () =>
     page.evaluate(() => {
       const root = document.querySelector('[aria-label="Fileo"]');
-      if (!root) return { gone: true, fading: true };
-      // The splash fades out only once its sequence has played (signed out,
-      // the app is ready at once), so the frame before the fade starts is
-      // the final logo.
-      return { gone: false, fading: parseFloat(getComputedStyle(root).opacity) < 0.999 };
+      if (!root) return { gone: true };
+      // Zooming: F fading or gone while the O grows, and the overlay itself
+      // not yet cross-fading.
+      const svgs = root.querySelectorAll('svg');
+      const fOpacity = parseFloat(getComputedStyle(svgs[0].parentElement).opacity);
+      const oGrowing = svgs[4].getBoundingClientRect().width > svgs[0].getBoundingClientRect().width + 1;
+      return { gone: false, zooming: fOpacity < 0.999 && oGrowing && parseFloat(getComputedStyle(root).opacity) >= 0.999 };
     });
 
   const frames = [];
+  const zoomFrames = [];
   let virtualMs = 0;
   let appMs = 0;
   for (let i = 0; i < FPS * 10; i++) {
@@ -138,11 +141,8 @@ async function captureRun(browser, base, { speed, name, stopAtFinalFrame }) {
     await page.screenshot({ path: file });
     frames.push(file);
     const s = await state();
-    if (stopAtFinalFrame && s.fading) {
-      frames.pop(); // already fading: keep the previous frame as the last
-      break;
-    }
-    if (!stopAtFinalFrame && s.gone) break; // this frame is the next screen's first
+    if (s.zooming) zoomFrames.push(frames.length - 1);
+    if (s.gone) break; // this frame is the next screen's first
     // Advance the app's clock by one output frame (slowed down for the slow run).
     virtualMs += frameMs;
     const target = Math.round(virtualMs * speed);
@@ -151,6 +151,7 @@ async function captureRun(browser, base, { speed, name, stopAtFinalFrame }) {
   }
   await context.close();
   log(`${name}: ${frames.length} frames (${Math.round(appMs)}ms of app time)`);
+  frames.midZoom = zoomFrames[Math.floor(zoomFrames.length / 2)];
   return frames;
 }
 
@@ -174,6 +175,7 @@ function buildTimeline(real, slow) {
   hold(SLOW_LEAD_IN_S, slow[0]);
   slow.forEach((f) => t.push({ a: f, b: null, mix: 0, label: 0 }));
   hold(FINAL_HOLD_S, slow[slow.length - 1]);
+  t.midZoom = Math.round(LEAD_IN_S * FPS) + real.midZoom; // from the real-speed run (no label)
   // "0.5x" fades in with the slow run and out as the final hold begins.
   const labelIn = Math.round(LABEL_FADE_S * FPS);
   const slowEnd = slowStart + Math.round(SLOW_LEAD_IN_S * FPS) + slow.length;
@@ -284,9 +286,9 @@ async function main() {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   try {
     log('capturing the splash at real speed …');
-    const real = await captureRun(browser, base, { speed: 1, name: 'real', stopAtFinalFrame: false });
+    const real = await captureRun(browser, base, { speed: 1, name: 'real' });
     log(`capturing the splash at ${SLOW_SPEED}x …`);
-    const slow = await captureRun(browser, base, { speed: SLOW_SPEED, name: 'slow', stopAtFinalFrame: true });
+    const slow = await captureRun(browser, base, { speed: SLOW_SPEED, name: 'slow' });
     const timeline = buildTimeline(real, slow);
     log(`timeline: ${timeline.length} frames = ${(timeline.length / FPS).toFixed(2)}s at ${FPS}fps`);
     for (const format of FORMATS) {
@@ -299,7 +301,7 @@ async function main() {
         const gif = path.join(here, 'fileo-splash.gif');
         encodeGif(frames, gif);
         log(`wrote ${path.relative(root, gif)}`);
-        fs.copyFileSync(path.join(frames, `${String(timeline.length - 1).padStart(4, '0')}.png`), path.join(here, 'fileo-splash-still.png'));
+        fs.copyFileSync(path.join(frames, `${String(timeline.midZoom).padStart(4, '0')}.png`), path.join(here, 'fileo-splash-still.png'));
       }
     }
   } finally {
