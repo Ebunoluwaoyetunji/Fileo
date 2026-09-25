@@ -10,21 +10,24 @@
  *
  * The bouncing ball:
  *   1. the five letters of FILEO fade in, dimmed
- *   2. a small green ball drops onto the F, then hops F → I → L → E → O in
- *      natural arcs (ease-out up, ease-in down)
+ *   2. a small green ball fades in as it drops onto the F, then hops
+ *      F → I → L → E → O in natural arcs (ease-out up, ease-in down); a
+ *      soft, flat contact shadow on the letter below grows and darkens as
+ *      it comes down, and shrinks and fades as it rises
  *   3. on each landing the ball squashes a little and stretches as it takes
- *      off again, and the letter dips and springs back, lighting up to full
- *      opacity
+ *      off again, the letter dips and springs back, lighting up to full
+ *      opacity, and a thin green ring ripples out from the landing point
  *   4. from the O the ball makes one small hop into the O's centre and
- *      shrinks away inside it
+ *      shrinks away inside it, with a slightly larger ripple
  *   5. the whole word does a quick "heartbeat" (up to 1.08 and back)
  *   6. the zoom — but only once BOTH the sequence has played AND `ready` is
  *      true (the auth session has loaded); if loading takes longer it holds
  *      on the logo, nothing loops:
- *        - F, I, L and E fade out, drifting away from the O
- *        - the O (inner shape and all) grows, ease-in, heading for the
- *          middle of the solid white wedge in its lower right, until that
- *          white covers the whole screen
+ *        - F, I, L and E fade out, drifting away from the O, while the O
+ *          glides until the middle of the solid white wedge in its lower
+ *          right (the zoom target) is at the centre of the screen
+ *        - the O (inner shape and all) then grows around that fixed point,
+ *          ease-in, until that white covers the whole screen
  *        - the now-white screen cross-fades into the next screen
  * With the system "reduce motion" setting on: no ball and no zoom, the
  * letters simply fade in together, hold, and the splash fades out.
@@ -60,6 +63,8 @@ const START_DELAY_MS = 100;
 const LETTERS_APPEAR_MS = 250;
 /** The ball falls from above onto the F. */
 const DROP_MS = 320;
+/** It fades in (0 → 1) over the first part of the drop. */
+const BALL_FADE_IN_MS = 150;
 /** Time on each letter: squash on landing, stretch on take-off. */
 const CONTACT_MS = 60;
 /** Each hop between letters. */
@@ -73,9 +78,13 @@ const LETTER_RECOVER_MS = 200;
 const LETTER_LIGHT_MS = 160;
 /** The word's "heartbeat" at the end (up and back). */
 const HEARTBEAT_MS = 400;
-/** Zoom: F, I, L and E fade out (and drift) as the O starts to grow. */
+/** Zoom: F, I, L and E fade out (and drift) as the O starts to glide. */
 const LETTERS_OUT_MS = 150;
-/** Zoom: the O grows until it fills the screen (ease-in). */
+/** Zoom: the O glides (ease-in-out, no scaling) until the zoom target sits
+ * at the centre of the screen. */
+const GLIDE_MS = 280;
+/** Zoom: the O grows around that fixed point until it fills the screen
+ * (ease-in), coming straight at the viewer. */
 const ZOOM_MS = 650;
 /** Zoom: the filled screen cross-fades into the next screen. */
 const CROSSFADE_MS = 200;
@@ -84,8 +93,8 @@ const REDUCED_FADE_IN_MS = 250;
 const REDUCED_HOLD_MS = 300;
 const REDUCED_FADE_OUT_MS = 200;
 // Total with defaults: 100 + 320 + 5×60 + 4×220 + 260 + 400 = 2,260 ms of
-// bouncing ball, then 650 ms zoom + 200 ms cross-fade = 3,110 ms (plus any
-// wait for the session to load, spent holding on the logo).
+// bouncing ball, then 280 ms glide + 650 ms zoom + 200 ms cross-fade =
+// 3,390 ms (plus any wait for the session to load, spent on the logo).
 
 // ─── Amounts and look — tweak here ───────────────────────────────────────────
 /** Letters before the ball lands on them. */
@@ -105,6 +114,24 @@ const FINAL_HOP_HEIGHT = 8;
 const SQUASH = 0.18;
 /** On take-off it gets this much taller and narrower. */
 const STRETCH = 0.12;
+/** Contact shadow: a soft, flat oval on the letter under the ball, darkest
+ * and widest as the ball touches down, shrinking and fading as it rises. */
+const SHADOW_COLOR = '#0B1628'; // navy
+const SHADOW_MAX_OPACITY = 0.2;
+/** Its size (pt) when the ball is on the letter, before squash widens it. */
+const SHADOW_WIDTH = 14;
+const SHADOW_HEIGHT = 3.5;
+/** Above this height (pt, from the letter to the ball's bottom) there's no
+ * shadow; it grows in as the ball comes down through it. */
+const SHADOW_FADE_HEIGHT = 22;
+/** Landing ripple: a thin ring of the ball's green that expands from the
+ * landing point and fades. */
+const RIPPLE_SIZE = BALL_SIZE * 3; // final diameter (pt)
+const RIPPLE_LINE = 1; // ring thickness (pt) once fully expanded
+const RIPPLE_OPACITY = 0.25; // at the start, fading to 0
+const RIPPLE_MS = 300;
+/** The last ripple, as the ball disappears into the O, is this much bigger. */
+const RIPPLE_FINAL_SCALE = 1.3;
 /** How far a landed-on letter dips (pt), and its spring-back overshoot. */
 const LETTER_DIP = 3.5;
 const LETTER_SPRING = 1.2; // Easing.back amount: ~0.3pt overshoot
@@ -203,7 +230,7 @@ function ball(t: number): BallState {
       y: land[0].y - DROP_HEIGHT * (1 - easeIn(p)),
       sx: 1,
       sy: 1 + STRETCH * 0.5 * easeIn(p),
-      opacity: easeOut(progress(t, DROP_START, 120)),
+      opacity: easeInOut(progress(t, DROP_START, BALL_FADE_IN_MS)),
     };
   }
   for (let k = 0; k < 5; k++) {
@@ -251,6 +278,47 @@ function ball(t: number): BallState {
   };
 }
 
+/** The top edge of letter k (where the ball touches it), dip included. */
+const letterTop = (k: number, t: number) => LANDING[k].y + BALL_SIZE / 2 + letterDip(k, t);
+
+/** The contact shadow at time t: where it sits (on top of the letter under
+ * the ball), how close the ball is (0 = far above, 1 = touching) and how
+ * much wider the ball's squash makes it. */
+function shadow(t: number): { x: number; y: number; near: number; widen: number } {
+  if (t < DROP_START) return { x: LANDING[0].x, y: letterTop(0, t), near: 0, widen: 1 };
+  const b = ball(t);
+  let top: number;
+  let fade = 1;
+  if (t < impactAt(0)) {
+    top = letterTop(0, t);
+  } else if (t < FINAL_HOP_START) {
+    // On letter k, or hopping from k to k + 1: the shadow moves from one
+    // letter's top to the next (it has all but faded by mid-hop).
+    const k = Math.min(4, Math.floor((t - impactAt(0)) / (CONTACT_MS + HOP_MS)));
+    const hop = k < 4 ? progress(t, impactAt(k) + CONTACT_MS, HOP_MS) : 0;
+    top = lerp(letterTop(k, t), k < 4 ? letterTop(k + 1, t) : 0, easeInOut(hop));
+  } else {
+    // The last hop: fades as the ball rises, gone before it drops into the O.
+    top = letterTop(4, t);
+    fade = 1 - progress(t, FINAL_HOP_START, FINAL_HOP_MS * 0.45);
+  }
+  const height = Math.max(0, top - (b.y + BALL_SIZE / 2));
+  const near = clamp01(1 - height / SHADOW_FADE_HEIGHT) * fade;
+  return { x: b.x, y: top, near, widen: b.sx };
+}
+/** The shadow is 4 stacked flat ovals (outer to inner) for a soft edge:
+ * each this opaque, so the centre ends up at SHADOW_MAX_OPACITY. */
+const SHADOW_LAYERS = [1, 0.8, 0.6, 0.4];
+const SHADOW_LAYER_OPACITY = 0.35;
+const SHADOW_STACK = 1 - Math.pow(1 - SHADOW_LAYER_OPACITY, SHADOW_LAYERS.length);
+
+/** Landing ripples: one per impact, centred on the contact point, plus a
+ * larger one in the O's centre as the ball disappears into it. */
+const RIPPLES = [
+  ...LANDING.map((land, k) => ({ x: land.x, y: land.y + BALL_SIZE / 2, start: impactAt(k), size: RIPPLE_SIZE })),
+  { ...O_CENTRE, start: FINAL_HOP_START + FINAL_HOP_MS * 0.7, size: RIPPLE_SIZE * RIPPLE_FINAL_SCALE },
+];
+
 // ─── Keyframes ───────────────────────────────────────────────────────────────
 /** Samples f along the timeline (every ~8ms, i.e. 120 per second) and drops
  * points that add nothing, giving an interpolation the native driver can
@@ -292,6 +360,21 @@ const TRACKS = {
   ballScaleX: keyframes((t) => ball(t).sx, SEQUENCE_MS),
   ballScaleY: keyframes((t) => ball(t).sy, SEQUENCE_MS),
   ballOpacity: keyframes((t) => (t < DROP_START ? 0 : ball(t).opacity), SEQUENCE_MS),
+  // Drawn SHADOW_WIDTH square (its ovals are circles squashed flat), so
+  // offset by half of that to centre it just below the letter's top edge,
+  // where most of it lies on the letter.
+  shadowX: keyframes((t) => shadow(t).x - SHADOW_WIDTH / 2, SEQUENCE_MS),
+  shadowY: keyframes((t) => shadow(t).y + SHADOW_HEIGHT * 0.35 - SHADOW_WIDTH / 2, SEQUENCE_MS),
+  shadowScaleX: keyframes((t) => (0.35 + 0.65 * shadow(t).near) * shadow(t).widen, SEQUENCE_MS),
+  shadowScaleY: keyframes((t) => 0.35 + 0.65 * shadow(t).near, SEQUENCE_MS),
+  shadowOpacity: keyframes((t) => (SHADOW_MAX_OPACITY / SHADOW_STACK) * Math.pow(shadow(t).near, 1.5), SEQUENCE_MS),
+  // Each ripple starts at the ball's size and expands to its own.
+  rippleScale: RIPPLES.map((r) =>
+    keyframes((t) => lerp(BALL_SIZE / r.size, 1, easeOut(progress(t, r.start, RIPPLE_MS))), SEQUENCE_MS)
+  ),
+  rippleOpacity: RIPPLES.map((r) =>
+    keyframes((t) => (t < r.start ? 0 : RIPPLE_OPACITY * (1 - progress(t, r.start, RIPPLE_MS))), SEQUENCE_MS)
+  ),
 };
 
 const LETTER_XML = LETTERS.map((letter) => buildWordmarkXml(FILEO_WORDMARK_COLOR, [FILEO_LETTER_PATHS[letter]]));
@@ -319,9 +402,10 @@ function detailBox(detail: number) {
 const DETAIL_BOXES = ZOOM_DETAIL_SCALES.map(detailBox);
 
 type Track = { inputRange: number[]; outputRange: number[] };
+const LEAVE_MS = GLIDE_MS + ZOOM_MS;
 /** 0 before `at`, 1 after (or the other way round). */
 const step = (at: number, from: number, to: number): Track => ({
-  inputRange: [0, Math.max(0, at - 1), Math.max(0, at - 1) + 0.01, ZOOM_MS + 1],
+  inputRange: [0, Math.max(0, at - 1), Math.max(0, at - 1) + 0.01, LEAVE_MS + 1],
   outputRange: [from, from, to, to],
 });
 
@@ -335,23 +419,30 @@ function zoomTracks(screenWidth: number, screenHeight: number) {
     x: ZOOM_TARGET.x * UNIT - LOGO_WIDTH / 2,
     y: ZOOM_TARGET.y * UNIT + OFFSET_Y - LOGO_HEIGHT / 2,
   };
-  // Ease-in on a log scale: every doubling of size takes less time than the
-  // last, so it starts slow and plunges.
-  const scaleAt = (t: number) => Math.pow(finalScale, easeIn(progress(t, 0, ZOOM_MS)));
-  const timeAtScale = (s: number) => ZOOM_MS * Math.sqrt(Math.log(s) / Math.log(finalScale)); // inverse of easeIn (quad)
-  // The target glides to the screen's centre as the O grows around it.
-  const glide = (t: number) => 1 - easeInOut(progress(t, 0, ZOOM_MS));
+  // First the glide: no scaling, the target moves to the screen's centre.
+  const glided = (t: number) => easeInOut(progress(t, 0, GLIDE_MS));
+  // Then the zoom, around that fixed point. Ease-in on a log scale: every
+  // doubling of size takes less time than the last, so it starts slow and
+  // plunges.
+  const scaleAt = (t: number) => Math.pow(finalScale, easeIn(progress(t, GLIDE_MS, ZOOM_MS)));
+  const timeAtScale = (s: number) => GLIDE_MS + ZOOM_MS * Math.sqrt(Math.log(s) / Math.log(finalScale)); // inverse of easeIn (quad)
+  // The transform is translate, then scale around the logo's (= screen's)
+  // centre, so the target lands at  scale × target + translate. Keeping that
+  // at `target × (1 − glided)` means: during the glide it slides to the
+  // centre; during the zoom it stays exactly there while everything grows
+  // around it.
+  const translate = (t: number, axis: 'x' | 'y') => target[axis] * (1 - glided(t)) - scaleAt(t) * target[axis];
   const lettersOut = (t: number) => easeOut(progress(t, 0, LETTERS_OUT_MS));
   // Each larger copy of the O takes over at the geometric midpoint between
   // its size and the previous one's (4x at 2x, 16x at 8x).
   const sizes = [1, ...ZOOM_DETAIL_SCALES];
   const handOver = sizes.slice(1).map((size, i) => timeAtScale(Math.sqrt(size * sizes[i])));
   return {
-    scale: keyframes(scaleAt, ZOOM_MS),
-    translateX: keyframes((t) => target.x * glide(t) - scaleAt(t) * target.x, ZOOM_MS),
-    translateY: keyframes((t) => target.y * glide(t) - scaleAt(t) * target.y, ZOOM_MS),
-    lettersOpacity: keyframes((t) => 1 - lettersOut(t), ZOOM_MS),
-    lettersDrift: keyframes((t) => -LETTERS_DRIFT * lettersOut(t), ZOOM_MS),
+    scale: keyframes(scaleAt, LEAVE_MS),
+    translateX: keyframes((t) => translate(t, 'x'), LEAVE_MS),
+    translateY: keyframes((t) => translate(t, 'y'), LEAVE_MS),
+    lettersOpacity: keyframes((t) => 1 - lettersOut(t), LEAVE_MS),
+    lettersDrift: keyframes((t) => -LETTERS_DRIFT * lettersOut(t), LEAVE_MS),
     // The wordmark's own O, then each larger copy in turn.
     oOpacity: [
       step(handOver[0], 1, 0),
@@ -360,7 +451,7 @@ function zoomTracks(screenWidth: number, screenHeight: number) {
         const on = step(at, 0, 1);
         if (off === undefined) return on;
         return {
-          inputRange: [...on.inputRange.slice(0, 3), off, off + 0.01, ZOOM_MS + 1],
+          inputRange: [...on.inputRange.slice(0, 3), off, off + 0.01, LEAVE_MS + 1],
           outputRange: [0, 0, 1, 1, 0, 0],
         };
       }),
@@ -464,8 +555,8 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
       return;
     }
     Animated.timing(zoom, {
-      toValue: ZOOM_MS,
-      duration: ZOOM_MS,
+      toValue: LEAVE_MS,
+      duration: LEAVE_MS,
       easing: Easing.linear, // the keyframes carry all the easing
       useNativeDriver: true,
     }).start(() => {
@@ -485,7 +576,16 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
         outputRange: [0, 1],
         extrapolate: 'clamp',
       });
-      return { letterOpacity: LETTERS.map(() => fadeIn), letterDip: null, letterDrift: null, wordScale: null, zoom: null, ball: null };
+      return {
+        letterOpacity: LETTERS.map(() => fadeIn),
+        letterDip: null,
+        letterDrift: null,
+        wordScale: null,
+        zoom: null,
+        ball: null,
+        shadow: null,
+        ripples: null,
+      };
     }
     const lettersOut = zoomTrack(zoomKeyframes.lettersOpacity);
     const [wordmarkO, ...detailO] = zoomKeyframes.oOpacity.map(zoomTrack);
@@ -515,6 +615,19 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
           { scaleY: track(TRACKS.ballScaleY) },
         ],
       },
+      shadow: {
+        opacity: track(TRACKS.shadowOpacity),
+        transform: [
+          { translateX: track(TRACKS.shadowX) },
+          { translateY: track(TRACKS.shadowY) },
+          { scaleX: track(TRACKS.shadowScaleX) },
+          { scaleY: track(TRACKS.shadowScaleY) },
+        ],
+      },
+      ripples: RIPPLES.map((r, i) => ({
+        opacity: track(TRACKS.rippleOpacity[i]),
+        transform: [{ scale: track(TRACKS.rippleScale[i]) }],
+      })),
     };
   }, [reduceMotion, timeline, zoom, zoomKeyframes]);
 
@@ -568,12 +681,43 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
                 </Animated.View>
               );
             })}
+            {/* On top of the letters, under the ball. */}
+            {animated.shadow ? (
+              <Animated.View style={[styles.shadow, animated.shadow]}>
+                {SHADOW_LAYERS.map((size) => (
+                  <View key={size} style={[styles.shadowLayer, shadowLayerStyle(size)]} />
+                ))}
+              </Animated.View>
+            ) : null}
+            {animated.ripples?.map((style, i) => (
+              <Animated.View key={i} style={[styles.ripple, rippleStyle(RIPPLES[i]), style]} />
+            ))}
           </Animated.View>
           {animated.ball ? <Animated.View style={[styles.ball, animated.ball]} /> : null}
         </View>
       ) : null}
     </Animated.View>
   );
+}
+
+/** One of the shadow's ovals: a circle `size` of the shadow's width,
+ * centred, squashed flat to the shadow's proportions. */
+function shadowLayerStyle(size: number) {
+  const diameter = SHADOW_WIDTH * size;
+  return {
+    left: (SHADOW_WIDTH - diameter) / 2,
+    top: (SHADOW_WIDTH - diameter) / 2,
+    width: diameter,
+    height: diameter,
+    borderRadius: diameter / 2,
+    transform: [{ scaleY: SHADOW_HEIGHT / SHADOW_WIDTH }],
+  };
+}
+
+/** A ripple ring at its full size, centred on its landing point; it's
+ * scaled down to the ball's size at the start. */
+function rippleStyle({ x, y, size }: { x: number; y: number; size: number }) {
+  return { left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: size / 2 };
 }
 
 const styles = StyleSheet.create({
@@ -601,6 +745,23 @@ const styles = StyleSheet.create({
     left: 0,
     width: LOGO_WIDTH,
     height: LOGO_HEIGHT,
+  },
+  shadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: SHADOW_WIDTH,
+    height: SHADOW_WIDTH,
+  },
+  shadowLayer: {
+    position: 'absolute',
+    backgroundColor: SHADOW_COLOR,
+    opacity: SHADOW_LAYER_OPACITY,
+  },
+  ripple: {
+    position: 'absolute',
+    borderWidth: RIPPLE_LINE,
+    borderColor: BALL_COLOR,
   },
   ball: {
     position: 'absolute',
