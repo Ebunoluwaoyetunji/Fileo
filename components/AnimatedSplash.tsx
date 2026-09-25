@@ -5,66 +5,263 @@
  *
  * Hand-off: the native splash (app.json → expo-splash-screen) is plain navy
  * #0B1628 — its image is transparent — and this overlay starts on the same
- * navy with the logo invisible, so there's no jump. The native splash is
- * only hidden once this overlay has been laid out on screen.
+ * navy with nothing on it, so there's no jump. The native splash is only
+ * hidden once this overlay has been laid out on screen.
  *
- * Sequence (tweak the constants below):
- *   1. the FILEO wordmark fades in (0 → 1) and settles (0.92 → 1), ease-out
- *   2. a thin forest-green line draws in under it, left to right, starting
- *      a little before the logo finishes
- *   3. a short hold
- *   4. the whole splash fades out — but only once BOTH the sequence has
- *      played AND `ready` is true (the auth session has loaded). If loading
- *      takes longer it simply holds on the final frame; nothing loops.
- * With the system "reduce motion" setting on, it's a quick fade in and out:
- * no scaling, no drawing.
+ * The bouncing ball:
+ *   1. the five letters of FILEO fade in, dimmed
+ *   2. a small green ball drops onto the F, then hops F → I → L → E → O in
+ *      natural arcs (ease-out up, ease-in down)
+ *   3. on each landing the ball squashes a little and stretches as it takes
+ *      off again, and the letter dips and springs back, lighting up to full
+ *      opacity
+ *   4. from the O the ball makes one small hop into the O's centre and
+ *      shrinks away inside it
+ *   5. the whole word does a quick "heartbeat" (up to 1.08 and back)
+ *   6. a short hold, then the splash fades out — but only once BOTH the
+ *      sequence has played AND `ready` is true (the auth session has
+ *      loaded). If loading takes longer it holds on the final frame; nothing
+ *      loops.
+ * With the system "reduce motion" setting on: no ball, the letters simply
+ * fade in together, hold, and the splash fades out.
  *
- * Only opacity and transforms are animated, all with the native driver
- * (React Native's built-in Animated API — no extra native package), so it
- * runs on the UI thread at 60fps even while JS is busy loading.
+ * The letters are the wordmark's own SVG paths, one per letter (see
+ * FileoWordmark), each drawn in the full wordmark viewBox — so the final
+ * frame is exactly the logo.
+ *
+ * Every movement is worked out once here, in JavaScript, as keyframes on a
+ * single timeline, then played by the native driver (React Native's
+ * built-in Animated API, no extra package): only opacity and transforms,
+ * all on the UI thread, so it stays smooth while the app loads behind it.
  */
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { splashLayout } from '../constants/theme';
-import { FileoWordmark } from './ui/FileoWordmark';
+import { buildWordmarkXml, FILEO_LETTER_PATHS, FILEO_WORDMARK_COLOR } from './ui/FileoWordmark';
 
-// ─── Timings (ms) and values — tweak here ───────────────────────────────────
-/** Pause after the overlay appears, so the first frame is settled. */
+// ─── Timings (ms) — tweak here ───────────────────────────────────────────────
+/** Plain navy before anything moves (matches the native splash). */
 const START_DELAY_MS = 100;
-/** Logo fade + scale in. */
-const LOGO_IN_MS = 500;
-/** Logo starts at this opacity and scale. (Set both to 1 if the native
- * splash ever shows the logo itself, so the hand-off stays seamless.) */
-const LOGO_FROM_OPACITY = 0;
-const LOGO_FROM_SCALE = 0.92;
-/** The green line starts drawing this long after the logo starts (a little
- * before the logo finishes) and takes LINE_DRAW_MS. */
-const LINE_START_MS = 350;
-const LINE_DRAW_MS = 400;
-/** Hold on the finished frame before fading out. */
-const HOLD_MS = 300;
+/** The dimmed letters fade in from the navy. */
+const LETTERS_APPEAR_MS = 250;
+/** The ball falls from above onto the F. */
+const DROP_MS = 320;
+/** Time on each letter: squash on landing, stretch on take-off. */
+const CONTACT_MS = 60;
+/** Each hop between letters. */
+const HOP_MS = 220;
+/** The last little hop from the top of the O into its centre. */
+const FINAL_HOP_MS = 260;
+/** A landed-on letter dips, then springs back. */
+const LETTER_DIP_MS = 70;
+const LETTER_RECOVER_MS = 200;
+/** A landed-on letter goes from dimmed to full. */
+const LETTER_LIGHT_MS = 160;
+/** The word's "heartbeat" at the end (up and back). */
+const HEARTBEAT_MS = 400;
+/** Hold on the finished logo before fading out. */
+const HOLD_MS = 250;
 /** Whole splash fades out. */
 const FADE_OUT_MS = 250;
-/** Reduce motion: simple fades only. */
-const REDUCED_FADE_IN_MS = 200;
-const REDUCED_HOLD_MS = 200;
+/** Reduce motion: letters fade in together, hold, fade out. */
+const REDUCED_FADE_IN_MS = 250;
+const REDUCED_HOLD_MS = 300;
 const REDUCED_FADE_OUT_MS = 200;
-// Total with defaults: 100 + 350 + 400 + 300 + 250 = 1,400 ms (plus any
-// wait for the session to load).
+// Total with defaults: 100 + 320 + 5×60 + 4×220 + 260 + 400 + 250 = 2,510 ms,
+// then the 250 ms fade-out (plus any wait for the session to load).
 
-// ─── Look ───────────────────────────────────────────────────────────────────
+// ─── Amounts and look — tweak here ───────────────────────────────────────────
+/** Letters before the ball lands on them. */
+const DIM_OPACITY = 0.25;
+/** Ball diameter (pt): about twice the wordmark's stroke width. */
+const BALL_SIZE = 8;
+/** Forest green, lightened (#0B6E4F → #129A6F) so a small ball reads clearly
+ * on navy: about 5:1 contrast instead of under 3:1. */
+const BALL_COLOR = '#129A6F';
+/** How far above the letters the ball starts its drop (pt). */
+const DROP_HEIGHT = 64;
+/** Height of each hop's arc above the letters (pt). */
+const HOP_HEIGHT = 14;
+/** Height of the last hop, before it drops into the O (pt). */
+const FINAL_HOP_HEIGHT = 8;
+/** On landing the ball gets this much wider and shorter (0.18 = 18%). */
+const SQUASH = 0.18;
+/** On take-off it gets this much taller and narrower. */
+const STRETCH = 0.12;
+/** How far a landed-on letter dips (pt), and its spring-back overshoot. */
+const LETTER_DIP = 3.5;
+const LETTER_SPRING = 1.2; // Easing.back amount: ~0.3pt overshoot
+/** Heartbeat peak scale. */
+const HEARTBEAT_SCALE = 1.08;
+
+// ─── Geometry (wordmark viewBox units: 141 × 35) ─────────────────────────────
 const LOGO_WIDTH = splashLayout.logoWidth;
 const LOGO_HEIGHT = splashLayout.logoHeight;
-const LINE_THICKNESS = 2;
-const LINE_GAP = 14;
-const LINE_COLOR = colors.primary; // forest green #0B6E4F
+const UNIT = LOGO_WIDTH / 141; // viewBox units → points
+const LETTERS = ['F', 'I', 'L', 'E', 'O'] as const;
+/** Where the ball lands on each letter: the middle of its top edge (the L's
+ * stem, since the L has no top bar). */
+const LANDING = [
+  { x: 11.5, top: 0.6 }, // F
+  { x: 34.7, top: 0.6 }, // I
+  { x: 52.1, top: 0.6 }, // L (stem)
+  { x: 86.0, top: 0.6 }, // E
+  { x: 122.7, top: 0 }, // O
+].map((p) => ({ x: p.x * UNIT, y: p.top * UNIT - BALL_SIZE / 2 }));
+/** The O's centre, where the ball ends up. */
+const O_CENTRE = { x: 122.7 * UNIT, y: 17.5 * UNIT };
 
-const EASE_OUT = Easing.out(Easing.cubic);
-const EASE_IN_OUT = Easing.inOut(Easing.cubic);
+// ─── The timeline ────────────────────────────────────────────────────────────
+const DROP_START = START_DELAY_MS;
+const impactAt = (k: number) => DROP_START + DROP_MS + k * (CONTACT_MS + HOP_MS);
+const FINAL_HOP_START = impactAt(4) + CONTACT_MS;
+const BALL_GONE = FINAL_HOP_START + FINAL_HOP_MS;
+const HEARTBEAT_START = BALL_GONE;
+const SEQUENCE_MS = HEARTBEAT_START + HEARTBEAT_MS + HOLD_MS;
+const REDUCED_SEQUENCE_MS = REDUCED_FADE_IN_MS + REDUCED_HOLD_MS;
 
+const easeIn = Easing.in(Easing.quad);
+const easeOut = Easing.out(Easing.quad);
+const easeInOut = Easing.inOut(Easing.quad);
+const springBack = Easing.out(Easing.back(LETTER_SPRING));
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const progress = (t: number, from: number, duration: number) => clamp01((t - from) / duration);
+const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
+
+/** How far letter k is dipped at time t (0 before its impact). */
+function letterDip(k: number, t: number) {
+  const impact = impactAt(k);
+  if (t < impact) return 0;
+  if (t < impact + LETTER_DIP_MS) return LETTER_DIP * easeOut(progress(t, impact, LETTER_DIP_MS));
+  return LETTER_DIP * (1 - springBack(progress(t, impact + LETTER_DIP_MS, LETTER_RECOVER_MS)));
+}
+
+function letterOpacity(k: number, t: number) {
+  const appear = DIM_OPACITY * easeOut(progress(t, START_DELAY_MS, LETTERS_APPEAR_MS));
+  const light = easeOut(progress(t, impactAt(k), LETTER_LIGHT_MS));
+  return lerp(appear, 1, light);
+}
+
+function wordScale(t: number) {
+  const p = progress(t, HEARTBEAT_START, HEARTBEAT_MS);
+  if (p <= 0 || p >= 1) return 1;
+  const up = 0.4; // share of the heartbeat spent growing
+  return p < up
+    ? lerp(1, HEARTBEAT_SCALE, easeOut(p / up))
+    : lerp(HEARTBEAT_SCALE, 1, easeInOut((p - up) / (1 - up)));
+}
+
+type BallState = { x: number; y: number; sx: number; sy: number; opacity: number };
+
+/** The ball's centre, squash/stretch and opacity at time t. */
+function ball(t: number): BallState {
+  const land = LANDING;
+  // Drop onto the F, stretching slightly as it falls.
+  if (t < impactAt(0)) {
+    const p = progress(t, DROP_START, DROP_MS);
+    return {
+      x: land[0].x,
+      y: land[0].y - DROP_HEIGHT * (1 - easeIn(p)),
+      sx: 1,
+      sy: 1 + STRETCH * 0.5 * easeIn(p),
+      opacity: easeOut(progress(t, DROP_START, 120)),
+    };
+  }
+  for (let k = 0; k < 5; k++) {
+    const impact = impactAt(k);
+    // On letter k: squash, then stretch as it leaves; rides the letter's dip.
+    if (t < impact + CONTACT_MS) {
+      // Arrives slightly stretched, squashes, then stretches to take off.
+      const p = progress(t, impact, CONTACT_MS);
+      const sy =
+        p < 0.45
+          ? lerp(1 + STRETCH * 0.5, 1 - SQUASH, Math.sin((p / 0.45) * (Math.PI / 2)))
+          : lerp(1 - SQUASH, 1 + STRETCH, easeInOut((p - 0.45) / 0.55));
+      return { x: land[k].x, y: land[k].y + letterDip(k, t), sx: 1 / Math.pow(sy, 0.8), sy, opacity: 1 };
+    }
+    // Hop k → k+1: a parabola (ease-out up, ease-in down), straight across.
+    if (k < 4 && t < impactAt(k + 1)) {
+      const p = progress(t, impact + CONTACT_MS, HOP_MS);
+      const arc = 1 - Math.pow(2 * p - 1, 2);
+      const takeOffY = land[k].y + letterDip(k, impact + CONTACT_MS);
+      const sy = 1 + STRETCH * (p < 0.4 ? 1 - easeOut(p / 0.4) : p > 0.7 ? 0.5 * easeIn((p - 0.7) / 0.3) : 0);
+      return {
+        x: lerp(land[k].x, land[k + 1].x, p),
+        y: lerp(takeOffY, land[k + 1].y, p) - HOP_HEIGHT * arc,
+        sx: 1 / Math.pow(sy, 0.8),
+        sy,
+        opacity: 1,
+      };
+    }
+  }
+  // Last hop: up a little, then down into the O's centre, shrinking away.
+  const p = progress(t, FINAL_HOP_START, FINAL_HOP_MS);
+  const apex = 0.35;
+  const takeOffY = land[4].y + letterDip(4, FINAL_HOP_START);
+  const y =
+    p < apex
+      ? lerp(takeOffY, land[4].y - FINAL_HOP_HEIGHT, easeOut(p / apex))
+      : lerp(land[4].y - FINAL_HOP_HEIGHT, O_CENTRE.y, easeIn((p - apex) / (1 - apex)));
+  const shrink = 1 - 0.9 * easeIn(progress(p, 0.4, 0.6));
+  return {
+    x: lerp(land[4].x, O_CENTRE.x, p),
+    y,
+    sx: shrink,
+    sy: shrink,
+    opacity: 1 - easeIn(progress(p, 0.55, 0.45)),
+  };
+}
+
+// ─── Keyframes ───────────────────────────────────────────────────────────────
+/** Samples f along the timeline (every ~8ms, i.e. 120 per second) and drops
+ * points that add nothing, giving an interpolation the native driver can
+ * play on its own. */
+function keyframes(f: (t: number) => number, end: number): { inputRange: number[]; outputRange: number[] } {
+  const step = 1000 / 120;
+  const ts: number[] = [];
+  for (let t = 0; t < end; t += step) ts.push(t);
+  ts.push(end);
+  const vs = ts.map(f);
+  const inputRange: number[] = [ts[0]];
+  const outputRange: number[] = [vs[0]];
+  for (let i = 1; i < ts.length - 1; i++) {
+    const [a, b, c] = [vs[i - 1], vs[i], vs[i + 1]];
+    // keep a point unless it's on a straight line between its neighbours
+    const expected = a + ((c - a) * (ts[i] - ts[i - 1])) / (ts[i + 1] - ts[i - 1]);
+    if (Math.abs(b - expected) > 1e-4) {
+      inputRange.push(ts[i]);
+      outputRange.push(b);
+    }
+  }
+  inputRange.push(ts[ts.length - 1]);
+  outputRange.push(vs[vs.length - 1]);
+  return { inputRange, outputRange };
+}
+
+// Worked out once, when this module loads.
+const TRACKS = {
+  letterOpacity: LETTERS.map((_, k) => keyframes((t) => letterOpacity(k, t), SEQUENCE_MS)),
+  letterDip: LETTERS.map((_, k) => keyframes((t) => letterDip(k, t), SEQUENCE_MS)),
+  wordScale: keyframes(wordScale, SEQUENCE_MS),
+  ballX: keyframes((t) => ball(t).x - BALL_SIZE / 2, SEQUENCE_MS),
+  // Squash/stretch keeps the ball's bottom on the letter: scale works around
+  // the centre, so shift down by the height it loses.
+  ballY: keyframes((t) => {
+    const b = ball(t);
+    return b.y - BALL_SIZE / 2 + ((1 - b.sy) * BALL_SIZE) / 2;
+  }, SEQUENCE_MS),
+  ballScaleX: keyframes((t) => ball(t).sx, SEQUENCE_MS),
+  ballScaleY: keyframes((t) => ball(t).sy, SEQUENCE_MS),
+  ballOpacity: keyframes((t) => (t < DROP_START ? 0 : ball(t).opacity), SEQUENCE_MS),
+};
+
+const LETTER_XML = LETTERS.map((letter) => buildWordmarkXml(FILEO_WORDMARK_COLOR, [FILEO_LETTER_PATHS[letter]]));
+
+// ─── Component ───────────────────────────────────────────────────────────────
 type Props = {
   /** True once the app knows where to go (auth session loaded). */
   ready: boolean;
@@ -81,16 +278,6 @@ const reduceMotionCheck = AccessibilityInfo.isReduceMotionEnabled()
     reduceMotionSetting = enabled;
     return enabled;
   });
-
-// The whole sequence is one timeline (ms) on the native thread; each part is
-// a slice of it. Once started it needs nothing from JavaScript, so it stays
-// smooth while the app is still loading behind it.
-const LOGO_START = START_DELAY_MS;
-const LOGO_END = LOGO_START + LOGO_IN_MS;
-const LINE_START = LOGO_START + LINE_START_MS;
-const LINE_END = LINE_START + LINE_DRAW_MS;
-const SEQUENCE_MS = Math.max(LOGO_END, LINE_END) + HOLD_MS;
-const REDUCED_SEQUENCE_MS = REDUCED_FADE_IN_MS + REDUCED_HOLD_MS;
 
 export function AnimatedSplash({ ready, onFinish }: Props) {
   const timeline = useRef(new Animated.Value(0)).current;
@@ -132,10 +319,11 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
     if (reduceMotion === null) {
       return;
     }
+    const length = reduceMotion ? REDUCED_SEQUENCE_MS : SEQUENCE_MS;
     const animation = Animated.timing(timeline, {
-      toValue: reduceMotion ? REDUCED_SEQUENCE_MS : SEQUENCE_MS,
-      duration: reduceMotion ? REDUCED_SEQUENCE_MS : SEQUENCE_MS,
-      easing: Easing.linear, // each slice below has its own easing
+      toValue: length,
+      duration: length,
+      easing: Easing.linear, // the keyframes carry all the easing
       useNativeDriver: true,
     });
     animation.start(({ finished }) => {
@@ -160,26 +348,32 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
     }).start(() => onFinish());
   }, [sequenceDone, ready, fadingOut, reduceMotion, splashOpacity, onFinish]);
 
-  const slice = (from: number, to: number, outputRange: number[], easing: (t: number) => number) =>
-    timeline.interpolate({ inputRange: [from, to], outputRange, easing, extrapolate: 'clamp' });
-
-  // Reduce motion: a plain fade, no scaling or drawing.
-  const logoOpacity = reduceMotion
-    ? slice(0, REDUCED_FADE_IN_MS, [0, 1], Easing.linear)
-    : slice(LOGO_START, LOGO_END, [LOGO_FROM_OPACITY, 1], EASE_OUT);
-  const logoScale = reduceMotion ? 1 : slice(LOGO_START, LOGO_END, [LOGO_FROM_SCALE, 1], EASE_OUT);
-  const lineProgress = reduceMotion ? 1 : slice(LINE_START, LINE_END, [0, 1], EASE_IN_OUT);
-  const lineOpacity = reduceMotion ? logoOpacity : 1;
-
-  // The line grows from its left edge: scaleX works around the centre, so
-  // shift it left by half the missing width as it grows.
-  const lineTransform =
-    typeof lineProgress === 'number'
-      ? []
-      : [
-          { translateX: lineProgress.interpolate({ inputRange: [0, 1], outputRange: [-LOGO_WIDTH / 2, 0] }) },
-          { scaleX: lineProgress.interpolate({ inputRange: [0, 1], outputRange: [0.001, 1] }) },
-        ];
+  const animated = useMemo(() => {
+    const track = (k: { inputRange: number[]; outputRange: number[] }) =>
+      timeline.interpolate({ ...k, extrapolate: 'clamp' });
+    if (reduceMotion) {
+      const fadeIn = timeline.interpolate({
+        inputRange: [0, REDUCED_FADE_IN_MS],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      });
+      return { letterOpacity: LETTERS.map(() => fadeIn), letterDip: null, wordScale: null, ball: null };
+    }
+    return {
+      letterOpacity: TRACKS.letterOpacity.map(track),
+      letterDip: TRACKS.letterDip.map(track),
+      wordScale: track(TRACKS.wordScale),
+      ball: {
+        opacity: track(TRACKS.ballOpacity),
+        transform: [
+          { translateX: track(TRACKS.ballX) },
+          { translateY: track(TRACKS.ballY) },
+          { scaleX: track(TRACKS.ballScaleX) },
+          { scaleY: track(TRACKS.ballScaleY) },
+        ],
+      },
+    };
+  }, [reduceMotion, timeline]);
 
   return (
     <Animated.View
@@ -191,13 +385,28 @@ export function AnimatedSplash({ ready, onFinish }: Props) {
     >
       <StatusBar style="light" />
       {/* Until we know about reduce motion the screen is plain navy — which
-          looks the same, since the logo starts invisible. */}
+          looks the same, since the letters start invisible. */}
       {reduceMotion !== null ? (
         <View style={styles.logoBox}>
-          <Animated.View style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}>
-            <FileoWordmark width={LOGO_WIDTH} height={LOGO_HEIGHT} />
+          <Animated.View
+            style={[styles.fill, animated.wordScale ? { transform: [{ scale: animated.wordScale }] } : null]}
+          >
+            {LETTERS.map((letter, k) => (
+              <Animated.View
+                key={letter}
+                style={[
+                  styles.fill,
+                  {
+                    opacity: animated.letterOpacity[k],
+                    transform: animated.letterDip ? [{ translateY: animated.letterDip[k] }] : [],
+                  },
+                ]}
+              >
+                <SvgXml xml={LETTER_XML[k]} width={LOGO_WIDTH} height={LOGO_HEIGHT} />
+              </Animated.View>
+            ))}
           </Animated.View>
-          <Animated.View style={[styles.line, { opacity: lineOpacity, transform: lineTransform }]} />
+          {animated.ball ? <Animated.View style={[styles.ball, animated.ball]} /> : null}
         </View>
       ) : null}
     </Animated.View>
@@ -217,19 +426,26 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     elevation: 1000,
   },
-  // Sized to the logo alone, so the logo sits at the exact centre (where the
-  // native splash centres its image); the line hangs below it.
+  // Sized to the logo, so it sits at the exact centre (where the native
+  // splash centres its image).
   logoBox: {
     width: LOGO_WIDTH,
     height: LOGO_HEIGHT,
   },
-  line: {
+  fill: {
     position: 'absolute',
+    top: 0,
     left: 0,
-    top: LOGO_HEIGHT + LINE_GAP,
     width: LOGO_WIDTH,
-    height: LINE_THICKNESS,
-    borderRadius: LINE_THICKNESS / 2,
-    backgroundColor: LINE_COLOR,
+    height: LOGO_HEIGHT,
+  },
+  ball: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: BALL_SIZE,
+    height: BALL_SIZE,
+    borderRadius: BALL_SIZE / 2,
+    backgroundColor: BALL_COLOR,
   },
 });

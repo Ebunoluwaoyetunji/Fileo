@@ -11,7 +11,8 @@
 //
 // Sequence: plain navy (as the native splash) → the splash at real speed →
 // the first frame of the next screen (signed-out onboarding) → crossfade →
-// the splash again at 0.5x with a "0.5x" label → hold on the logo and line.
+// the splash again at 0.5x with a "0.5x" label (ball bouncing across FILEO)
+// → hold on the final logo.
 //
 // Needs: Node 18+, Playwright (npm i -D playwright; npx playwright install
 // chromium) and ffmpeg on the PATH (or FFMPEG=/path/to/ffmpeg). Builds the
@@ -31,12 +32,12 @@ const { chromium } = require('playwright');
 
 // ─── Tweak here ───────────────────────────────────────────────────────────────
 const FPS = 60;
-const LEAD_IN_S = 0.8; // plain navy before the first run
-const NEXT_SCREEN_HOLD_S = 1.8; // first frame of the next screen, incl. the pause
-const CROSSFADE_S = 0.6; // next screen → navy before the slow run
+const LEAD_IN_S = 0.5; // plain navy before the first run
+const NEXT_SCREEN_HOLD_S = 1.2; // first frame of the next screen, incl. the pause
+const CROSSFADE_S = 0.5; // next screen → navy before the slow run
 const SLOW_SPEED = 0.5; // second run
-const SLOW_LEAD_IN_S = 0.4;
-const FINAL_HOLD_S = 1.6; // logo + line at the end
+const SLOW_LEAD_IN_S = 0.2;
+const FINAL_HOLD_S = 1.2; // final logo at the end
 const LABEL_FADE_S = 0.25;
 const NEXT_SCREEN_ROUTE = '/step-1'; // signed-out onboarding, no personal data
 const GIF_WIDTH = 720;
@@ -122,15 +123,11 @@ async function captureRun(browser, base, { speed, name, stopAtFinalFrame }) {
   const state = () =>
     page.evaluate(() => {
       const root = document.querySelector('[aria-label="Fileo"]');
-      if (!root) return { gone: true };
-      const svg = root.querySelector('svg');
-      if (!svg) return { gone: false, final: false };
-      const logo = svg.parentElement;
-      const line = logo.nextElementSibling;
-      return {
-        gone: false,
-        final: parseFloat(getComputedStyle(logo).opacity) >= 0.999 && line.getBoundingClientRect().width >= svg.getBoundingClientRect().width - 0.5,
-      };
+      if (!root) return { gone: true, fading: true };
+      // The splash fades out only once its sequence has played (signed out,
+      // the app is ready at once), so the frame before the fade starts is
+      // the final logo.
+      return { gone: false, fading: parseFloat(getComputedStyle(root).opacity) < 0.999 };
     });
 
   const frames = [];
@@ -141,7 +138,10 @@ async function captureRun(browser, base, { speed, name, stopAtFinalFrame }) {
     await page.screenshot({ path: file });
     frames.push(file);
     const s = await state();
-    if (stopAtFinalFrame && s.final) break;
+    if (stopAtFinalFrame && s.fading) {
+      frames.pop(); // already fading: keep the previous frame as the last
+      break;
+    }
     if (!stopAtFinalFrame && s.gone) break; // this frame is the next screen's first
     // Advance the app's clock by one output frame (slowed down for the slow run).
     virtualMs += frameMs;

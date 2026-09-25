@@ -44,13 +44,12 @@ export const layout = {
 } as const;
 
 /**
- * Splash screen (Figma node 88:612): full-bleed dark frame with the FILEO
- * wordmark centered horizontally, offset from the top of the frame.
+ * The FILEO wordmark's size on the splash (Figma node 88:612), used by the
+ * animated splash (components/AnimatedSplash.tsx).
  */
 export const splashLayout = {
   logoWidth: 140.765,
   logoHeight: 34.992,
-  logoTop: 405,
 } as const;
 
 /**
