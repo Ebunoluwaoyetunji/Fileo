@@ -6,7 +6,7 @@
 // Outputs (in this folder):
 //   fileo-review-4x5.mp4   1080x1350, H.264 / yuv420p, 60fps (LinkedIn feed)
 //   fileo-review-1x1.mp4   1080x1080, same encoding
-//   fileo-review.gif       720px wide (4:5), 30fps
+//   fileo-review.gif       540px wide (4:5), 20fps
 //   fileo-review-still.png the final frame ("ready to submit" sheet)
 //
 // Story: the review screen → tap Income Summary (opens) → tap Tax calculation
@@ -47,8 +47,8 @@ const SCROLL_DURATION_S = 3.8; // ease-in-out, top to bottom
 const APPROVE_TAP_S = 7.6; // tap "Approve and submit"
 const END_S = 10.2; // hold on the sheet
 const TAP_MS = 380; // the tap marker's life
-const GIF_WIDTH = 720;
-const GIF_FPS = 30;
+const GIF_WIDTH = 540;
+const GIF_FPS = 20;
 
 const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@example.com';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPass-2026'; // a throwaway local account
@@ -285,9 +285,9 @@ function encodeGif(framesDir, output) {
   const palette = path.join(work, 'palette.png');
   const filters = `fps=${GIF_FPS},scale=${GIF_WIDTH}:-1:flags=lanczos`;
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(framesDir, '%04d.png'),
-    '-vf', `${filters},palettegen=max_colors=192:stats_mode=diff`, palette]);
+    '-vf', `${filters},palettegen=max_colors=96:stats_mode=diff`, palette]);
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(framesDir, '%04d.png'), '-i', palette,
-    '-lavfi', `${filters}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`, '-loop', '0', output]);
+    '-lavfi', `${filters}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`, '-loop', '0', output]);
 }
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
