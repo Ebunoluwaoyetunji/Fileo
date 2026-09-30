@@ -36,7 +36,9 @@ export default function Index() {
   }
 
   if (!hasCompletedOnboarding) {
-    return <Redirect href="/(onboarding)/splash" />;
+    // The animated splash (components/AnimatedSplash) has just played, so
+    // first-time users go straight to the first onboarding screen.
+    return <Redirect href="/(onboarding)/step-1" />;
   }
 
   return <Redirect href="/(auth)/sign-in" />;

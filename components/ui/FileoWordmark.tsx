@@ -17,9 +17,23 @@ const FILEO_WORDMARK_PATHS = [
   'M0.108 34.3447C0.036 34.3447 0 34.2367 0 34.0207C0 33.8047 0.036 33.6967 0.108 33.6967C1.44 33.6967 2.412 33.6067 3.024 33.4267C3.672 33.2467 4.104 32.8867 4.32 32.3467C4.572 31.8067 4.698 31.0147 4.698 29.9707V4.96872C4.698 3.92472 4.59 3.15073 4.374 2.64673C4.158 2.10672 3.726 1.74672 3.078 1.56672C2.466 1.35072 1.548 1.24273 0.324 1.24273C0.216 1.24273 0.162 1.13473 0.162 0.918726C0.162 0.702727 0.216 0.594727 0.324 0.594727H22.356C22.716 0.594727 22.896 0.756725 22.896 1.08072L23.004 7.88473C23.004 7.99273 22.896 8.06473 22.68 8.10073C22.5 8.10073 22.392 8.04673 22.356 7.93873C22.104 5.95873 21.402 4.46473 20.25 3.45673C19.098 2.41273 17.586 1.89073 15.714 1.89073H12.96C11.376 1.89073 10.314 2.10673 9.774 2.53872C9.234 2.97073 8.964 3.79873 8.964 5.02272V29.7547C8.964 30.8347 9.108 31.6627 9.396 32.2387C9.684 32.7787 10.278 33.1567 11.178 33.3727C12.114 33.5887 13.482 33.6967 15.282 33.6967C15.354 33.6967 15.39 33.8047 15.39 34.0207C15.39 34.2367 15.354 34.3447 15.282 34.3447C14.094 34.3447 12.798 34.3267 11.394 34.2907C10.026 34.2547 8.478 34.2367 6.75 34.2367C5.526 34.2367 4.338 34.2547 3.186 34.2907C2.034 34.3267 1.008 34.3447 0.108 34.3447ZM19.656 22.5727C19.656 21.0247 19.188 19.8907 18.252 19.1707C17.316 18.4147 15.822 18.0367 13.77 18.0367H6.912V16.7947H13.932C15.912 16.7947 17.352 16.4707 18.252 15.8227C19.152 15.1747 19.602 14.2027 19.602 12.9067C19.602 12.8347 19.71 12.7987 19.926 12.7987C20.142 12.7987 20.25 12.8347 20.25 12.9067C20.25 14.0227 20.232 14.8867 20.196 15.4987C20.196 16.1107 20.196 16.7587 20.196 17.4427C20.196 18.2707 20.214 19.0987 20.25 19.9267C20.286 20.7547 20.304 21.6367 20.304 22.5727C20.304 22.6447 20.196 22.6807 19.98 22.6807C19.764 22.6807 19.656 22.6447 19.656 22.5727Z',
 ];
 
-function buildWordmarkXml(color: string) {
-  const paths = FILEO_WORDMARK_PATHS.map((d) => `<path d="${d}" fill="${color}"/>`).join('');
-  return `<svg width="141" height="35" viewBox="0 0 141 35" fill="none" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+/** The same paths, one per letter — for the animated splash, which moves
+ * each letter on its own. Positions are in the wordmark's 141x35 viewBox. */
+export const FILEO_LETTER_PATHS = {
+  F: FILEO_WORDMARK_PATHS[4],
+  I: FILEO_WORDMARK_PATHS[3],
+  L: FILEO_WORDMARK_PATHS[2],
+  E: FILEO_WORDMARK_PATHS[1],
+  O: FILEO_WORDMARK_PATHS[0],
+} as const;
+
+export const FILEO_WORDMARK_COLOR = '#FAFAF8';
+
+/** The wordmark's SVG, or only some of its paths (still in the full
+ * viewBox, so a single letter lands exactly where it sits in the logo). */
+export function buildWordmarkXml(color: string, paths: readonly string[] = FILEO_WORDMARK_PATHS) {
+  const markup = paths.map((d) => `<path d="${d}" fill="${color}"/>`).join('');
+  return `<svg width="141" height="35" viewBox="0 0 141 35" fill="none" xmlns="http://www.w3.org/2000/svg">${markup}</svg>`;
 }
 
 type FileoWordmarkProps = {
@@ -28,6 +42,6 @@ type FileoWordmarkProps = {
   color?: string;
 };
 
-export function FileoWordmark({ width = 140.765, height = 34.992, color = '#FAFAF8' }: FileoWordmarkProps) {
+export function FileoWordmark({ width = 140.765, height = 34.992, color = FILEO_WORDMARK_COLOR }: FileoWordmarkProps) {
   return <SvgXml xml={buildWordmarkXml(color)} width={width} height={height} />;
 }
