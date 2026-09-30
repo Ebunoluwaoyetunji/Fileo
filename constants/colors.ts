@@ -25,6 +25,19 @@ export const colors = {
 
   overlay: 'rgba(17, 20, 23, 0.5)',
 
+  // Flat tints (no gradients) for layered, shadow-free surfaces.
+  offWhite: '#FAFAF8',
+  /** ~6% forest green on off-white: hero areas. */
+  greenTint: '#ECF2EE',
+  /** Thin outlines that need to read on white (timeline markers). */
+  mutedStroke: '#B8BFC6',
+  /** Track of a segmented control. */
+  track: '#EDEFEC',
+  /** Calm "needs attention" (not an error). */
+  amberTint: '#FBF4E6',
+  amberBorder: '#EEDDB9',
+  amberText: '#7A5310',
+
   // Onboarding hero gradients (steps 1 and 3 fade down into `background`).
   forestDeep: '#2C5A48',
   goldSoft: '#F0CB8E',

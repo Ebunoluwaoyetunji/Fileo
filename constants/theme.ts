@@ -36,7 +36,20 @@ export const typography = {
     fontWeight: '400' as const,
     fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
   },
+  /** Playfair Display Bold (bundled, see app/_layout.tsx): hero numbers only. */
+  hero: { fontSize: 40, lineHeight: 50, fontFamily: 'PlayfairDisplay-Bold' },
+  /** Small uppercase section label, e.g. "INCOME SOURCES". */
+  overline: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600' as const,
+    letterSpacing: 0.9,
+    textTransform: 'uppercase' as const,
+  },
 } as const;
+
+/** Monospaced figures so amounts line up in columns. */
+export const tabularNumbers = { fontVariant: ['tabular-nums' as const] };
 
 export const layout = {
   screenPadding: spacing.lg,

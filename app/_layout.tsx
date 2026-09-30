@@ -19,8 +19,9 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    // Register custom fonts from assets/fonts here as they're added, e.g.
-    // 'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
+    // Register custom fonts from assets/fonts here as they're added.
+    // Playfair Display (SIL Open Font License, see assets/fonts): hero numbers.
+    'PlayfairDisplay-Bold': require('../assets/fonts/PlayfairDisplay-Bold.ttf'),
   });
 
   if (!fontsLoaded && !fontError) {
