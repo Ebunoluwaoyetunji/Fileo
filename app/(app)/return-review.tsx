@@ -1,10 +1,11 @@
 /**
  * Review your tax return. Layout:
- *   - a hero on a soft green tint: the total tax due (Playfair Display), the
- *     income it's based on, and "You saved ₦…" when deductions saved tax
+ *   - a hero on a soft green tint: tax year and state, the total tax due
+ *     (Playfair Display), the income it's based on, and "Deductions saved
+ *     you ₦…" when deductions saved tax
  *   - anything still missing, in a calm amber card with each item's Fix
  *   - segmented tabs (cross-fade, no navigation):
- *       Summary      split stat card (taxable income | tax due), income
+ *       Summary      split stat card (taxable income | effective rate), income
  *                    sources, deductions (ones the year doesn't allow are
  *                    muted, with the reason), filing details
  *       Calculation  the server's working as a timeline, income → expenses
@@ -13,7 +14,7 @@
  *       Documents    this year's documents, ticked when linked to a step;
  *                    tapping one opens the document
  *   - a sticky bottom bar: a short line and "Approve and submit", which
- *     opens the existing "ready to submit" sheet.
+ *     opens the "ready to submit" sheet (with the accuracy declaration).
  * ⚠️ Not from a Figma frame: built from the brief and inspiration screenshots
  * (design/inspo/review-screen), with the app's tokens.
  *
@@ -48,6 +49,8 @@ import {
   PiggyBank,
   ReceiptText,
   ShieldCheck,
+  Wallet,
+  HousePlus,
 } from 'lucide-react-native';
 import { ReactNode, useCallback, useRef, useState } from 'react';
 import {
@@ -65,12 +68,12 @@ import { BackButton } from '../../components/ui/BackButton';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { PlatformIcon } from '../../components/ui/PlatformIcon';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import { Timeline, TimelineItem } from '../../components/ui/Timeline';
 import { openFix, RequireDraft, SaveErrorNote } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { colors } from '../../constants/colors';
+import { isNigerianBank } from '../../constants/platforms';
 import { layout, radii, spacing, tabularNumbers, typography } from '../../constants/theme';
 import { categoryLabel, DocumentRecord, listDocuments } from '../../lib/documents';
 import { describeMissingItem, getMissingItems, MissingItem } from '../../lib/filings';
@@ -97,16 +100,23 @@ function bandLabel(band: TaxBand, index: number) {
 /** The first sentence of a server note, for a short reason. */
 const firstSentence = (text: string) => text.match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? text;
 
-/** "Guaranty Trust Bank" -> "GT", "Paystack" -> "PA". */
-function initials(label: string) {
-  const words = label.trim().split(/\s+/);
-  return (words.length > 1 ? words[0][0] + words[1][0] : label.slice(0, 2)).toUpperCase();
+/** Not stored per user yet: every return shows this state (same text as
+ * the old screen's Filing Information). */
+const STATE_LABEL = 'Lagos State';
+
+/** Tax due as a share of income after expenses, e.g. "12.3%". No income
+ * means no tax, so 0.0% rather than a division by zero. */
+function effectiveRate(calc: TaxCalculation) {
+  if (calc.incomeAfterExpensesKobo <= 0) {
+    return '0.0%';
+  }
+  return `${((calc.taxDueKobo / calc.incomeAfterExpensesKobo) * 100).toFixed(1)}%`;
 }
 
 const DEDUCTION_ICONS: Record<string, typeof PiggyBank> = {
   pension: PiggyBank,
   life_assurance: ShieldCheck,
-  nhf: Landmark,
+  nhf: HousePlus,
   rent: House,
 };
 
@@ -259,10 +269,10 @@ function ReturnReviewContent() {
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
-            <ReceiptText size={24} strokeWidth={1.5} color={colors.backgroundInverse} />
+            <ReceiptText size={20} strokeWidth={1.5} color={colors.backgroundInverse} />
           </View>
           <Text style={styles.heroLabel} accessibilityRole="header">
-            Your {taxYear} tax return
+            {taxYear} · {STATE_LABEL}
           </Text>
           <Text
             style={styles.heroAmount}
@@ -280,7 +290,7 @@ function ReturnReviewContent() {
           {savedKobo > 0 ? (
             <View style={styles.savedChip}>
               <PiggyBank size={15} strokeWidth={1.75} color={colors.primary} />
-              <Text style={styles.savedChipText}>You saved {formatNaira(savedKobo)}</Text>
+              <Text style={styles.savedChipText}>Deductions saved you {formatNaira(savedKobo)}</Text>
             </View>
           ) : null}
         </View>
@@ -381,9 +391,19 @@ function ReturnReviewContent() {
           <View style={styles.submittingToRow}>
             <Text style={styles.submittingToLabel}>Submitting to:</Text>
             <View style={styles.submittingToBadge}>
-              <PlatformIcon label="FIRS" size={28} />
+              <View style={styles.badge}>
+                <Landmark size={16} strokeWidth={1.75} color={colors.primary} />
+              </View>
               <Text style={styles.submittingToName}>Federal Inland Revenue Service (FIRS)</Text>
             </View>
+          </View>
+
+          <View style={styles.declaration}>
+            <Info size={14} strokeWidth={1.75} color={colors.textSecondary} style={styles.declarationIcon} />
+            <Text style={styles.declarationText}>
+              By submitting, you confirm that the information provided is accurate to the best of
+              your knowledge.
+            </Text>
           </View>
 
           <Button
@@ -434,9 +454,9 @@ function SummaryTab({
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statHalf}>
-          <Text style={styles.statLabel}>Tax due</Text>
-          <Text style={[styles.statValue, styles.statValueDue]} numberOfLines={1} adjustsFontSizeToFit>
-            {calc ? formatNaira(calc.taxDueKobo) : '—'}
+          <Text style={styles.statLabel}>Effective rate</Text>
+          <Text style={[styles.statValue, styles.statValueRate]} numberOfLines={1} adjustsFontSizeToFit>
+            {calc ? effectiveRate(calc) : '—'}
           </Text>
         </View>
       </View>
@@ -450,7 +470,13 @@ function SummaryTab({
             <ListRow
               key={source.id}
               first={index === 0}
-              badge={<Text style={styles.badgeText}>{initials(source.label)}</Text>}
+              badge={
+                isNigerianBank(source.label) ? (
+                  <Landmark size={16} strokeWidth={1.75} color={colors.primary} />
+                ) : (
+                  <Wallet size={16} strokeWidth={1.75} color={colors.primary} />
+                )
+              }
               label={source.label}
               value={source.amountKobo === null ? '—' : formatNaira(source.amountKobo)}
             />
@@ -498,17 +524,9 @@ function SummaryTab({
       <SectionHeader title="Filing details" />
       <Card style={styles.listCard}>
         <ListRow first label="Tax year" value={String(taxYear)} plain />
-        <ListRow label="State" value="Lagos State" plain />
+        <ListRow label="State" value={STATE_LABEL} plain />
         <ListRow label="Prepared by" value="Fileo Tax Professional" plain />
       </Card>
-
-      <View style={styles.footnoteRow}>
-        <Info size={14} strokeWidth={1.75} color={colors.textSecondary} />
-        <Text style={styles.footnote}>
-          By submitting, you confirm that the information provided is accurate to the best of your
-          knowledge.
-        </Text>
-      </View>
     </View>
   );
 }
@@ -753,13 +771,13 @@ const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
     paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
+    paddingTop: 0,
+    paddingBottom: spacing.lg,
   },
   heroIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(11, 22, 40, 0.16)',
     backgroundColor: colors.offWhite,
@@ -776,7 +794,7 @@ const styles = StyleSheet.create({
     ...typography.hero,
     ...tabularNumbers,
     color: colors.backgroundInverse,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   heroLine: {
     ...typography.caption,
@@ -788,7 +806,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: spacing.md,
+    marginTop: spacing.sm + 4,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: radii.full,
@@ -873,7 +891,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  statValueDue: {
+  statValueRate: {
     color: colors.primaryDark,
   },
   sectionHeader: {
@@ -925,13 +943,6 @@ const styles = StyleSheet.create({
   },
   badgeMuted: {
     backgroundColor: colors.surface,
-  },
-  badgeText: {
-    ...typography.caption,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    color: colors.primary,
   },
   rowText: {
     flex: 1,
@@ -989,16 +1000,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     paddingVertical: spacing.md,
   },
-  footnoteRow: {
+  declaration: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.xs + 2,
-    marginTop: spacing.lg,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
   },
-  footnote: {
+  declarationIcon: {
+    marginTop: 2,
+  },
+  declarationText: {
     ...typography.caption,
-    fontSize: 12,
-    lineHeight: 17,
     color: colors.textSecondary,
     flex: 1,
   },

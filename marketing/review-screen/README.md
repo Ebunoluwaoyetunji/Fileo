@@ -8,6 +8,9 @@ phone frame like the splash demo, all 1080x1350:
 - `review-documents.png`: Documents tab
 - `review-tabs.mp4`: 60fps, switching between the three tabs
 
+`review-before-after.png` puts the old screen next to the new Summary tab. It
+was made by hand from two screenshots, not by the script.
+
 The data is fake. Use a local/test backend only, never a real customer's account:
 
 1. Create the account `demo@example.com` (password `DemoPass-2026`, or set
