@@ -6,6 +6,7 @@
 // Outputs (in this folder), all 1080x1350:
 //   review-summary.png      Summary tab
 //   review-calculation.png  Calculation tab (the timeline)
+//   review-tax-bands.png    the "How tax bands work" sheet
 //   review-documents.png    Documents tab
 //   review-tabs.mp4         H.264 / yuv420p, 60fps: Summary → Calculation
 //                           (scrolls through the working) → Documents → Summary
@@ -187,6 +188,15 @@ async function captureStills(browser, base) {
   await settle();
   shots.calculation = path.join(work, 'still-calculation.png');
   await page.screenshot({ path: shots.calculation });
+  await page.getByRole('button', { name: 'How tax bands work', exact: true }).click();
+  // The sheet slides in with a CSS animation, which runs in real time.
+  await page.waitForTimeout(900);
+  await settle();
+  shots['tax-bands'] = path.join(work, 'still-tax-bands.png');
+  await page.screenshot({ path: shots['tax-bands'] });
+  await page.getByRole('button', { name: 'Got it', exact: true }).click();
+  await page.waitForTimeout(900);
+  await settle();
   await setScroll(page, 0);
   await page.getByRole('tab', { name: 'Documents' }).click();
   await settle();
@@ -291,10 +301,10 @@ async function main() {
   try {
     log('stills …');
     const shots = await captureStills(browser, base);
-    const names = ['summary', 'calculation', 'documents'];
+    const names = ['summary', 'calculation', 'tax-bands', 'documents'];
     const framed = await composite(browser, base, names.map((n) => shots[n]), path.join(work, 'stills'));
     names.forEach((n, i) => fs.copyFileSync(framed[i], path.join(here, `review-${n}.png`)));
-    log('wrote review-summary.png, review-calculation.png, review-documents.png');
+    log(`wrote ${names.map((n) => `review-${n}.png`).join(', ')}`);
 
     log('video frames …');
     const frames = await captureVideo(browser, base);

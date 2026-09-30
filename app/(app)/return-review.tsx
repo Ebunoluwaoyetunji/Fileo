@@ -9,8 +9,11 @@
  *                    sources, deductions (ones the year doesn't allow are
  *                    muted, with the reason), filing details
  *       Calculation  the server's working as a timeline, income → expenses
- *                    → reliefs → taxable income → each band → minimum-tax
- *                    check → tax due
+ *                    → reliefs → taxable income → your tax band (the top
+ *                    band's rate, or "Minimum tax applied") → tax due; "How
+ *                    tax bands work" opens a sheet with the year's band
+ *                    table (the user's band highlighted) and the per-band
+ *                    breakdown
  *       Documents    this year's documents, ticked when linked to a step;
  *                    tapping one opens the document
  *   - a sticky bottom bar: a short line and "Approve and submit", which
@@ -41,6 +44,7 @@ import { router, useFocusEffect } from 'expo-router';
 import {
   ChevronRight,
   CircleAlert,
+  CircleHelp,
   CircleCheck,
   FileText,
   House,
@@ -61,6 +65,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,14 +93,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'documents', label: 'Documents' },
 ];
 const TAB_FADE_MS = 180;
-
-function bandLabel(band: TaxBand, index: number) {
-  const rate = `${band.rateBp / 100}%`;
-  if (band.widthKobo === null) {
-    return `Above ${formatNaira(band.fromKobo)} at ${rate}`;
-  }
-  return `${index === 0 ? 'First' : 'Next'} ${formatNaira(band.widthKobo)} at ${rate}`;
-}
 
 /** The first sentence of a server note, for a short reason. */
 const firstSentence = (text: string) => text.match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? text;
@@ -532,7 +529,81 @@ function SummaryTab({
 }
 
 // ─── Calculation ─────────────────────────────────────────────────────────────
+/** 700 -> "7%", 750 -> "7.5%". */
+const ratePercent = (rateBp: number) => `${rateBp / 100}%`;
+
+/** "First ₦300,000", "Next ₦500,000", "Above ₦3,200,000". */
+function bandSlice(band: TaxBand, index: number) {
+  if (band.widthKobo === null) {
+    return `Above ${formatNaira(band.fromKobo)}`;
+  }
+  return `${index === 0 ? 'First' : 'Next'} ${formatNaira(band.widthKobo)}`;
+}
+
+/** The highest band any of the taxable income reaches (null: none). */
+function topBandIndex(calc: TaxCalculation) {
+  for (let i = calc.bands.length - 1; i >= 0; i -= 1) {
+    if (calc.bands[i].taxableKobo > 0) {
+      return i;
+    }
+  }
+  return null;
+}
+
+/** The minimum tax as a share of the income it's based on ("1%"), from the
+ * stored figures. The server applies it to income after expenses and
+ * deductions (not the consolidated relief allowance). */
+function minimumTaxPercent(calc: TaxCalculation) {
+  const deductedKobo = calc.reliefs
+    .filter((relief) => relief.code !== 'cra')
+    .reduce((sum, relief) => sum + relief.appliedKobo, 0);
+  const baseKobo = calc.incomeAfterExpensesKobo - deductedKobo;
+  if (calc.minimumTaxKobo === null || baseKobo <= 0) {
+    return null;
+  }
+  const percent = Math.round((calc.minimumTaxKobo / baseKobo) * 1000) / 10;
+  return `${percent}%`;
+}
+
+/** The "Your tax band" step: the top band's rate and one plain line, all
+ * from the stored calculation. */
+function taxBandStep(calc: TaxCalculation): TimelineItem {
+  if (calc.minimumTaxApplied && calc.minimumTaxKobo !== null) {
+    const percent = minimumTaxPercent(calc);
+    return {
+      key: 'band',
+      label: 'Minimum tax applied',
+      value: formatNaira(calc.minimumTaxKobo),
+      detail: percent
+        ? `Your tax from the bands was lower than ${percent} of your income, so the minimum tax of ${percent} applies.`
+        : 'Your tax from the bands was lower than the minimum tax, so the minimum tax applies.',
+    };
+  }
+  const index = topBandIndex(calc);
+  if (index === null) {
+    return {
+      key: 'band',
+      label: 'Your tax band',
+      value: ratePercent(0),
+      detail: 'You have no taxable income, so there’s no tax from the bands.',
+    };
+  }
+  const band = calc.bands[index];
+  const rate = ratePercent(band.rateBp);
+  let detail: string;
+  if (index === 0) {
+    detail =
+      band.rateBp === 0
+        ? 'Your income is below the taxable threshold, so there’s no tax from the bands.'
+        : `All your taxable income is taxed at ${rate}.`;
+  } else {
+    detail = `Only the part of your taxable income above ${formatNaira(band.fromKobo)} is taxed at ${rate}. On average, you pay ${effectiveRate(calc)}.`;
+  }
+  return { key: 'band', label: 'Your tax band', value: rate, detail };
+}
+
 function CalculationTab({ calc }: { calc: TaxCalculation | null }) {
+  const [showBands, setShowBands] = useState(false);
   if (!calc) {
     return <Text style={styles.emptyState}>We’ll work out your tax once your income is entered.</Text>;
   }
@@ -571,34 +642,7 @@ function CalculationTab({ calc }: { calc: TaxCalculation | null }) {
     value: formatNaira(calc.taxableIncomeKobo),
     tone: 'strong',
   });
-  const bands = calc.bands.filter((band) => band.taxableKobo > 0);
-  bands.forEach((band, index) => {
-    items.push({
-      key: `band-${band.fromKobo}`,
-      section: index === 0 ? 'Tax by band' : undefined,
-      label: bandLabel(band, calc.bands.indexOf(band)),
-      value: formatNaira(band.taxKobo),
-    });
-  });
-  if (bands.length === 0) {
-    items.push({
-      key: 'no-bands',
-      section: 'Tax by band',
-      label: 'No taxable income, so no tax from the bands',
-      value: formatNaira(0),
-    });
-  }
-  if (calc.minimumTaxKobo !== null) {
-    items.push({
-      key: 'minimum',
-      section: 'Minimum tax check',
-      label: 'Minimum tax (1% of gross income)',
-      value: formatNaira(calc.minimumTaxKobo),
-      detail: calc.minimumTaxApplied
-        ? 'Your tax from the bands is lower, so the minimum tax applies.'
-        : 'Your tax from the bands is higher, so the minimum tax doesn’t apply.',
-    });
-  }
+  items.push({ ...taxBandStep(calc), section: 'Tax' });
   items.push({ key: 'due', section: 'Result', label: 'Tax due', value: formatNaira(calc.taxDueKobo), tone: 'final' });
 
   return (
@@ -606,10 +650,97 @@ function CalculationTab({ calc }: { calc: TaxCalculation | null }) {
       <Card style={styles.timelineCard}>
         <Timeline items={items} />
       </Card>
+      <Pressable
+        onPress={() => setShowBands(true)}
+        style={styles.bandsLink}
+        accessibilityRole="button"
+        accessibilityHint="Opens an explanation with the full band table"
+      >
+        <CircleHelp size={16} strokeWidth={1.75} color={colors.primary} />
+        <Text style={styles.link}>How tax bands work</Text>
+      </Pressable>
       <Text style={styles.rulesNote}>
         Calculated under the {calc.rulesName ?? 'tax rules for this year'} ({calc.rulesVersion}). Amounts
         are rounded to the nearest kobo at each step.
       </Text>
+      <BottomSheet visible={showBands} onClose={() => setShowBands(false)}>
+        <TaxBandsSheet calc={calc} onClose={() => setShowBands(false)} />
+      </BottomSheet>
+    </View>
+  );
+}
+
+function TaxBandsSheet({ calc, onClose }: { calc: TaxCalculation; onClose: () => void }) {
+  const { height } = useWindowDimensions();
+  const top = topBandIndex(calc);
+  const taxed = calc.bands.filter((band) => band.taxableKobo > 0);
+  const minimumPercent = minimumTaxPercent(calc);
+  return (
+    <View style={styles.sheetContent}>
+      <ScrollView style={{ maxHeight: height * 0.68 }} showsVerticalScrollIndicator={false}>
+        <Text style={styles.bandsTitle}>How tax bands work</Text>
+        <Text style={styles.bandsBody}>
+          Your taxable income is split into bands, and each band has its own rate, starting low and
+          rising. A higher rate only applies to the part of your income inside that band, not to all
+          of it. That’s why the rate you pay on average is lower than your top band.
+        </Text>
+
+        <Text style={styles.bandsHeading}>{calc.taxYear} tax bands</Text>
+        <View style={styles.bandTable}>
+          {calc.bands.map((band, index) => {
+            const mine = index === top;
+            return (
+              <View
+                key={band.fromKobo}
+                style={[styles.bandRow, index > 0 && !mine && index - 1 !== top && styles.rowDivider, mine && styles.bandRowMine]}
+                accessibilityLabel={`${bandSlice(band, index)} at ${ratePercent(band.rateBp)}${mine ? ', your band' : ''}`}
+              >
+                <Text style={[styles.bandSlice, mine && styles.bandTextMine]}>{bandSlice(band, index)}</Text>
+                {mine ? <Text style={styles.bandTag}>Your band</Text> : null}
+                <Text style={[styles.bandRate, mine && styles.bandTextMine]}>{ratePercent(band.rateBp)}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <Text style={styles.bandsHeading}>Your breakdown</Text>
+        {taxed.length === 0 ? (
+          <Text style={styles.breakdownNote}>No taxable income, so no tax from the bands.</Text>
+        ) : (
+          taxed.map((band) => (
+            <View key={band.fromKobo} style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>
+                {formatNaira(band.taxableKobo)} at {ratePercent(band.rateBp)}
+              </Text>
+              <Text style={styles.breakdownValue}>{formatNaira(band.taxKobo)}</Text>
+            </View>
+          ))
+        )}
+        <View style={[styles.breakdownRow, styles.breakdownTotal]}>
+          <Text style={styles.breakdownLabelStrong}>Tax from the bands</Text>
+          <Text style={styles.breakdownValueStrong}>{formatNaira(calc.bandTaxKobo)}</Text>
+        </View>
+        {calc.minimumTaxKobo !== null ? (
+          <>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>
+                Minimum tax{minimumPercent ? ` (${minimumPercent} of income)` : ''}
+              </Text>
+              <Text style={styles.breakdownValue}>{formatNaira(calc.minimumTaxKobo)}</Text>
+            </View>
+            <Text style={styles.breakdownNote}>
+              {calc.minimumTaxApplied
+                ? 'Your tax from the bands is lower, so the minimum tax applies.'
+                : 'Your tax from the bands is higher, so the minimum tax doesn’t apply.'}
+            </Text>
+          </>
+        ) : null}
+        <View style={[styles.breakdownRow, styles.breakdownTotal]}>
+          <Text style={styles.breakdownLabelStrong}>Tax due</Text>
+          <Text style={[styles.breakdownValueStrong, styles.breakdownDue]}>{formatNaira(calc.taxDueKobo)}</Text>
+        </View>
+      </ScrollView>
+      <Button label="Got it" variant="primary" onPress={onClose} style={styles.bandsButton} />
     </View>
   );
 }
@@ -1019,6 +1150,128 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.md,
+  },
+  bandsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    minHeight: 44,
+    marginTop: spacing.sm,
+  },
+  bandsTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  bandsBody: {
+    ...typography.body,
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  bandsHeading: {
+    ...typography.overline,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  bandTable: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: spacing.xs,
+  },
+  bandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.md - 4,
+    paddingVertical: spacing.sm,
+  },
+  bandRowMine: {
+    backgroundColor: colors.greenTint,
+    borderRadius: radii.md,
+  },
+  bandSlice: {
+    ...typography.body,
+    ...tabularNumbers,
+    fontSize: 15,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  bandRate: {
+    ...typography.body,
+    ...tabularNumbers,
+    fontSize: 15,
+    color: colors.textPrimary,
+    minWidth: 44,
+    textAlign: 'right',
+  },
+  bandTextMine: {
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  bandTag: {
+    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    backgroundColor: colors.background,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: 6,
+  },
+  breakdownTotal: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+  },
+  breakdownLabel: {
+    ...typography.body,
+    ...tabularNumbers,
+    fontSize: 15,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  breakdownValue: {
+    ...typography.body,
+    ...tabularNumbers,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  breakdownLabelStrong: {
+    ...typography.bodyStrong,
+    fontSize: 15,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  breakdownValueStrong: {
+    ...typography.bodyStrong,
+    ...tabularNumbers,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  breakdownDue: {
+    color: colors.primaryDark,
+  },
+  breakdownNote: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  bandsButton: {
+    borderRadius: radii.full,
+    marginTop: spacing.lg,
   },
   rulesNote: {
     ...typography.caption,

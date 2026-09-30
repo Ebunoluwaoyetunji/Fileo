@@ -5,6 +5,7 @@ phone frame like the splash demo, all 1080x1350:
 
 - `review-summary.png`: Summary tab
 - `review-calculation.png`: Calculation tab (timeline)
+- `review-tax-bands.png`: the "How tax bands work" sheet
 - `review-documents.png`: Documents tab
 - `review-tabs.mp4`: 60fps, switching between the three tabs
 
