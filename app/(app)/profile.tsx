@@ -26,7 +26,7 @@
  *    other session while this one stays signed in.
  *  - Legal/Support items open shared placeholder content (info-page.tsx).
  */
-import { AlarmClock, Bell, ChevronRight, CircleCheck, CircleHelp, FileText, Fingerprint, Flag, Grid3x3, Lock, LogOut, Mail, MessageCircleMore, Shield, ShieldCheck, Smartphone, Sparkles, User, type LucideIcon } from 'lucide-react-native';
+import { AlarmClock, Bell, ChevronRight, CircleCheck, CircleHelp, FileText, Fingerprint, Flag, Grid3x3, Lock, Mail, MessageCircleMore, Shield, ShieldCheck, Smartphone, Sparkles, User, type LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
@@ -85,7 +85,6 @@ function Row({
   onPress,
   right,
   isLast,
-  danger,
 }: {
   icon: LucideIcon;
   label: string;
@@ -93,14 +92,13 @@ function Row({
   onPress?: () => void;
   right?: React.ReactNode;
   isLast?: boolean;
-  danger?: boolean;
 }) {
   const content = (
     <View style={[styles.row, !isLast && styles.rowDivider]}>
       <View style={styles.rowLeft}>
-        <Icon color={danger ? colors.danger : colors.textSecondary} style={styles.rowIcon} />
+        <Icon color={colors.textSecondary} style={styles.rowIcon} />
         <View style={styles.rowTextWrap}>
-          <Text style={[styles.rowLabel, danger && styles.rowLabelDanger]}>{label}</Text>
+          <Text style={styles.rowLabel}>{label}</Text>
           {value ? <Text style={styles.rowValue}>{value}</Text> : null}
         </View>
       </View>
@@ -414,15 +412,14 @@ export default function ProfileScreen() {
           />
         </Card>
 
-        <Card style={styles.sectionCard}>
-          <Row
-            icon={LogOut}
-            label="Sign out"
-            onPress={() => setActiveModal('signOut')}
-            danger
-            isLast
-          />
-        </Card>
+        {/* Signing out deletes nothing, so it's the secondary style with red
+            text; only the final confirm in the sheet is solid red. */}
+        <Button
+          label="Sign out"
+          variant="secondaryDanger"
+          onPress={() => setActiveModal('signOut')}
+          style={styles.signOutButton}
+        />
       </HeroScroll>
 
       <BottomTabBar active="profile" />
@@ -638,6 +635,9 @@ const styles = StyleSheet.create({
     padding: 0,
     overflow: 'hidden',
   },
+  signOutButton: {
+    marginTop: spacing.lg,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -665,9 +665,6 @@ const styles = StyleSheet.create({
   rowLabel: {
     ...typography.body,
     color: colors.textPrimary,
-  },
-  rowLabelDanger: {
-    color: colors.danger,
   },
   rowValue: {
     ...typography.caption,

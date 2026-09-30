@@ -22,7 +22,7 @@ a screen.
 | `textPrimary` | `#111417` | Body text and headings. |
 | `textSecondary` | `#5B6470` | Secondary text, labels, captions (5.9:1 on white). |
 | `amberTint` / `amberBorder` / `amberText` | `#FBF4E6` / `#EEDDB9` / `#7A5310` | Calm "needs attention" (something missing). Not an error. |
-| `danger` | `#D93025` | Errors and destructive buttons (white text 4.8:1). |
+| `danger` | `#D93025` | Errors; solid fill only on buttons that delete data or confirm sign-out (white text 4.8:1); red text on Sign out. |
 | `successTint` | `#DCEFE3` | "Completed" / "Submitted" status pills. |
 | `disabledSurface` | `#E6E9ED` | Disabled buttons, with `textSecondary` text. |
 
@@ -63,8 +63,14 @@ a screen.
 - **Button** (`components/ui/Button`): one style per variant, all pill-shaped.
   - `primary`: navy, for the main action. Use one per screen.
   - `secondary`: white with a border and navy text, for the alternative (Cancel, Try again).
-  - `destructive`: red, for deleting or signing out.
+  - `secondaryDanger`: the secondary style with red text, for leaving actions that delete nothing (Sign out on Profile).
+  - `destructive`: solid red with white text.
   - `loading` keeps the colour and shows a spinner. `disabled` turns flat grey.
+- **When to use solid red:** only for actions that delete data (Delete
+  document) and for the final confirm in the sign-out sheet. Sign out itself
+  isn't destructive, so its entry point is `secondaryDanger`.
+  - Do: Profile → "Sign out" (`secondaryDanger`) → sheet → "Sign out" (`destructive`) and "Cancel" (`secondary`).
+  - Don't: a solid red button that only opens a confirmation, or red fill for anything that can be undone.
 - **Card** (`components/ui/Card`): 20pt radius, hairline border, 24pt padding.
   In lists, use 16pt side padding with hairline dividers between rows.
 - **HeroScroll** (`components/layout/HeroScroll`): a summary hero on

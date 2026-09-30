@@ -1,9 +1,12 @@
 /**
- * The app's one button. Three variants, one style each (see DESIGN.md):
- *   primary      navy (colors.primaryButton), white text: the main action
- *   secondary    white with a hairline border, navy text: the other option
- *                (Cancel, Try again, Enter manually)
- *   destructive  red (colors.danger), white text: deleting or signing out
+ * The app's one button. One style per variant (see DESIGN.md):
+ *   primary          navy (colors.primaryButton), white text: the main action
+ *   secondary        white with a border, navy text: the other option
+ *                    (Cancel, Try again, Enter manually)
+ *   secondaryDanger  the secondary style with red text: leaving actions that
+ *                    delete nothing (Sign out on Profile)
+ *   destructive      solid red, white text: only actions that delete data,
+ *                    and the final confirm in the sign-out sheet
  * All are pill-shaped. Disabled is a flat grey with dark grey text (not a
  * faded colour), loading keeps the colour and shows a spinner, pressed dims
  * slightly.
@@ -21,7 +24,7 @@ import {
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'destructive';
+type ButtonVariant = 'primary' | 'secondary' | 'secondaryDanger' | 'destructive';
 
 type ButtonProps = {
   label: string;
@@ -43,6 +46,7 @@ export function Button({
   const isDisabled = disabled || loading;
   // Loading keeps the variant's colour; only a real "can't do this yet" greys out.
   const showDisabled = disabled && !loading;
+  const isOutline = variant === 'secondary' || variant === 'secondaryDanger';
 
   return (
     <Pressable
@@ -53,13 +57,21 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         variantStyles[variant],
-        showDisabled && (variant === 'secondary' ? styles.disabledOutline : styles.disabledFill),
+        showDisabled && (isOutline ? styles.disabledOutline : styles.disabledFill),
         pressed && !isDisabled && styles.pressed,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? colors.primaryButton : colors.onPrimaryButton} />
+        <ActivityIndicator
+          color={
+            variant === 'secondary'
+              ? colors.primaryButton
+              : variant === 'secondaryDanger'
+                ? colors.danger
+                : colors.onPrimaryButton
+          }
+        />
       ) : (
         <Text style={[styles.label, textVariantStyles[variant], showDisabled && styles.disabledText]}>
           {label}
@@ -105,6 +117,11 @@ const variantStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  secondaryDanger: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   destructive: {
     backgroundColor: colors.danger,
   },
@@ -116,6 +133,9 @@ const textVariantStyles = StyleSheet.create({
   },
   secondary: {
     color: colors.primaryButton,
+  },
+  secondaryDanger: {
+    color: colors.danger,
   },
   destructive: {
     color: colors.onPrimaryButton,
