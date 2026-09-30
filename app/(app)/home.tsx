@@ -2,7 +2,7 @@
  * Home: one filing card that says the single next step, then the numbers
  * so far, short explainers, and past years. Top to bottom:
  *
- *  1. Header: initials avatar (opens Profile), the bell, and a greeting.
+ *  1. Header: the greeting and the bell on one row (Profile is its own tab).
  *  2. Filing card: a solid navy card on the tinted hero. Top row: the
  *     "2025 TAX RETURN" label with a small SegmentedRing on the right (one
  *     segment per step). Then the next step as the title (the screen's one
@@ -108,16 +108,6 @@ function timeGreeting(hour: number): string {
   return 'Good evening';
 }
 
-/** "Ebun Oyetunji" -> "EO", "Ebun" -> "E". */
-function initials(fullName: string | null | undefined): string {
-  const words = (fullName ?? '').trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) {
-    return '';
-  }
-  const letters = words.length === 1 ? [words[0]] : [words[0], words[words.length - 1]];
-  return letters.map((word) => word.charAt(0).toUpperCase()).join('');
-}
-
 /** The draft's next step in plain words, from where it was last saved. */
 function nextStepTitle(draft: Filing): string {
   switch (draft.currentStep) {
@@ -205,7 +195,6 @@ export default function HomeScreen() {
 
   const firstName = profile?.full_name?.trim().split(/\s+/)[0];
   const greeting = firstName ? `${timeGreeting(now.getHours())}, ${firstName}` : timeGreeting(now.getHours());
-  const avatarText = initials(profile?.full_name);
 
   const openFiling = (entry: FilingHistoryEntry) =>
     router.push({ pathname: '/(app)/filing-detail', params: { id: entry.id } });
@@ -215,17 +204,7 @@ export default function HomeScreen() {
   const hero = (
     <>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.push('/(app)/profile')}
-          style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Profile"
-          hitSlop={4}
-        >
-          <Text style={styles.avatarText} maxFontSizeMultiplier={1.4}>
-            {avatarText}
-          </Text>
-        </Pressable>
+        <Text style={styles.greeting}>{greeting}</Text>
         <Pressable
           onPress={() => router.push('/(app)/notifications')}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
@@ -236,9 +215,6 @@ export default function HomeScreen() {
           <Bell size={24} />
         </Pressable>
       </View>
-      <Text style={styles.greeting}>
-        {greeting}
-      </Text>
 
       <FilingCard
         card={card}
@@ -546,7 +522,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   hero: {
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
   },
   sheet: {
     paddingBottom: spacing.xl,
@@ -560,22 +536,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
     marginBottom: spacing.md,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    borderWidth: 1.5,
-    borderColor: colors.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    ...typography.caption,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-    color: colors.textPrimary,
   },
   iconButton: {
     width: 44,
@@ -590,7 +552,7 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '500',
     color: colors.textPrimary,
-    marginBottom: spacing.lg,
+    flexShrink: 1,
   },
 
   // Filing card: label and ring → title → context → deadline → button.
