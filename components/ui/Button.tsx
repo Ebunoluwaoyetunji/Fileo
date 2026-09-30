@@ -7,6 +7,8 @@
  *                    delete nothing (Sign out on Profile)
  *   destructive      solid red, white text: only actions that delete data,
  *                    and the final confirm in the sign-out sheet
+ *   inverse          white, navy text: the primary button on dark (navy)
+ *                    surfaces, such as Home's filing card
  * All are pill-shaped. Disabled is a flat grey with dark grey text (not a
  * faded colour), loading keeps the colour and shows a spinner, pressed dims
  * slightly.
@@ -24,7 +26,7 @@ import {
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'secondaryDanger' | 'destructive';
+type ButtonVariant = 'primary' | 'secondary' | 'secondaryDanger' | 'destructive' | 'inverse';
 
 type ButtonProps = {
   label: string;
@@ -65,7 +67,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           color={
-            variant === 'secondary'
+            variant === 'secondary' || variant === 'inverse'
               ? colors.primaryButton
               : variant === 'secondaryDanger'
                 ? colors.danger
@@ -125,6 +127,9 @@ const variantStyles = StyleSheet.create({
   destructive: {
     backgroundColor: colors.danger,
   },
+  inverse: {
+    backgroundColor: colors.onPrimaryButton,
+  },
 });
 
 const textVariantStyles = StyleSheet.create({
@@ -139,5 +144,8 @@ const textVariantStyles = StyleSheet.create({
   },
   destructive: {
     color: colors.onPrimaryButton,
+  },
+  inverse: {
+    color: colors.primaryButton,
   },
 });

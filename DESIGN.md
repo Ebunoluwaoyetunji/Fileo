@@ -10,7 +10,10 @@ a screen.
 | Token | Hex | Use it for |
 |---|---|---|
 | `primaryButton` | `#0B1628` | Every primary button and the active tab icon. White text on it (18:1). |
-| `backgroundInverse` | `#0B1628` | Navy surfaces such as the splash. Same navy as `primaryButton`. |
+| `backgroundInverse` | `#0B1628` | Navy surfaces: the splash and Home's filing card. Same navy as `primaryButton`. |
+| `primaryOnDark` | `#5FC79B` | Green on navy (labels, ring segments). `primary` is only 2.9:1 on navy; this is 8.7:1. |
+| `textOnDarkMuted` | white at 70% | Secondary text and icons on navy (9.2:1). |
+| `faintOnDark` | white at 15% | Faint marks on navy: empty ring segments and skeletons. |
 | `primary` | `#0B6E4F` | Accent green: success, savings, positive amounts, ticks, links, selected chips, switches. Not a button colour. |
 | `primaryDark` | `#074D37` | Green text that must read small (tax due, totals). |
 | `primaryLight` | `#E3F3EC` | Green chips and callouts ("Deductions saved you…", "What's next?"). |
@@ -72,6 +75,8 @@ a screen.
   - `secondary`: white with a border and navy text, for the alternative (Cancel, Try again).
   - `secondaryDanger`: the secondary style with red text, for leaving actions that delete nothing (Sign out on Profile).
   - `destructive`: solid red with white text.
+  - `inverse`: white with navy text. **On dark surfaces, the primary button
+    is white with navy text** (Home's filing card). Use one per dark card.
   - `loading` keeps the colour and shows a spinner. `disabled` turns flat grey.
 - **When to use solid red:** only for actions that delete data (Delete
   document) and for the final confirm in the sign-out sheet. Sign out itself
@@ -90,32 +95,42 @@ a screen.
   history. Section names are small green text, and the result step uses `tone="final"`.
 - **BottomSheet** (`components/ui/BottomSheet`): confirmations and short
   explanations. It has one primary button and a secondary way out.
-- **SegmentedProgress** (`components/ui/SegmentedProgress`): progress
-  through a fixed number of steps. It shows one short rounded segment per
-  step (24 x 4pt, 4pt gaps). Done segments are `primary`, the rest `border`.
-  - Put short muted text beside it: "3 of 5 steps". Before starting, show
-    the size of the job ("5 steps · about 10 minutes"). When done, use one
-    word ("Submitted", or "Filed" with a 16pt green tick).
-  - On Home's filing card it sits under the title.
-  - Do: use it for steps the user works through.
-  - Don't: use it for amounts or percentages.
-- **SegmentedRing** (`components/ui/SegmentedRing`): the same idea as a
-  ring, with centre content. It's kept for later but isn't used on Home, so
-  it doesn't compete with the title. If it's used, it's one ring per card.
+- **SegmentedRing** (`components/ui/SegmentedRing`): progress through a
+  fixed number of steps, as a ring of equal segments with gaps and rounded
+  ends. Content can go in the centre.
+  - On a dark card (Home's filing card), keep it small, 44pt with a 4pt
+    stroke. Put it in the top-right corner, level with the card's label row,
+    never beside the title, so the title keeps the full width.
+  - On a dark card, done segments are `primaryOnDark` and the rest
+    `faintOnDark`. The centre is 12pt semibold white "3/5", or a 16pt white
+    clock (submitted) or tick (filed).
+  - It sweeps in when the count changes, and jumps straight there with
+    Reduce Motion on. Use one ring per card, and only for steps, not amounts.
+- **SegmentedProgress** (`components/ui/SegmentedProgress`): the same idea
+  as a thin bar, one short 24 x 4pt segment per step with text beside it
+  ("3 of 5 steps"). It's kept for light surfaces and isn't used on Home.
 - **Learn card** (Home's "Helpful to know"): a horizontal, swipeable row of
   200pt white cards, each with a hairline border, a 36pt `heroTint` icon
   circle, a short title (15pt semibold) and one line of `caption`. Let the
   next card peek in so the row reads as swipeable. Each card opens a
   BottomSheet explainer from `components/filing/HelpSheets` with a "Got it"
   button.
-- **Deadline**: by default a plain muted line (`caption`, `textSecondary`)
-  with a 16pt calendar icon: "Due 31 Mar 2026 · 49 days left".
+- **Deadline**: by default a plain muted line (`caption`, `textSecondary`,
+  or `textOnDarkMuted` on navy) with a 16pt calendar icon: "Due 31 Mar 2026 · 49 days left".
   - In the last 14 days, it becomes an amber pill with the same text.
   - Once past, it's an amber pill: "Overdue by 12 days".
   - Deadlines live in `constants/deadlines.ts`, one date per tax year.
-- **Home filing card order**: label (green overline) → title → progress with
-  step text → deadline → one primary button. Spacing: 8 below the label,
-  16 above the progress, 8 above the deadline, 24 above the button.
+- **Home filing card**: a solid navy (`backgroundInverse`) card, with no
+  border and a 20pt radius.
+  - Order: label (green overline in `primaryOnDark`) and ring on one row →
+    Playfair title in white → a muted context line only when it helps ("5
+    steps · about 10 minutes", "Submitted 12 Feb 2026") → the deadline →
+    one `inverse` button.
+  - Muted text and icons on the card are `textOnDarkMuted`. The amber
+    deadline pill keeps its own light fill, so it reads the same on navy.
+  - Spacing: 8 above the title, 16 above the first line under it, 8
+    between lines, 24 above the button.
+  - An error isn't shown on navy: it stays a compact white card.
 - **Error cards**: keep them compact, with no Playfair: a 20pt alert icon, a
   regular-weight 18pt title ("Couldn't load your return"), one line of
   helper text and a secondary "Try again" button.

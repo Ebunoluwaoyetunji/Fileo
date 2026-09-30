@@ -35,6 +35,14 @@ export const colors = {
   /** Disabled buttons: flat grey with dark grey text (4.9:1), not faded. */
   disabledSurface: '#E6E9ED',
 
+  // On navy (backgroundInverse) surfaces. `primary` green is only 2.9:1 on
+  // navy, so green there uses the lighter primaryOnDark (8.7:1).
+  primaryOnDark: '#5FC79B',
+  /** Secondary text on navy: white at 70% (9.2:1). */
+  textOnDarkMuted: 'rgba(255, 255, 255, 0.7)',
+  /** Faint marks on navy (ring track, skeletons): white at 15%. */
+  faintOnDark: 'rgba(255, 255, 255, 0.15)',
+
   // Flat tints (no gradients) for layered, shadow-free surfaces.
   offWhite: '#FAFAF8',
   /** ~6% forest green on off-white: hero / top summary areas, and the soft
