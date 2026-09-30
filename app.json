@@ -43,7 +43,9 @@
           "image": "./assets/images/splash-blank.png",
           "imageWidth": 200
         }
-      ]
+      ],
+      "expo-image",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
