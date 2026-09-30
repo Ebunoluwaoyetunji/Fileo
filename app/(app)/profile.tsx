@@ -26,11 +26,12 @@
  *    other session while this one stays signed in.
  *  - Legal/Support items open shared placeholder content (info-page.tsx).
  */
-import { Ionicons } from '@expo/vector-icons';
+import { AlarmClock, Bell, ChevronRight, CircleCheck, CircleHelp, FileText, Fingerprint, Flag, Grid3x3, Lock, LogOut, Mail, MessageCircleMore, Shield, ShieldCheck, Smartphone, Sparkles, User, type LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
+import { HeroScroll } from '../../components/layout/HeroScroll';
 import { Screen } from '../../components/layout/Screen';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
@@ -78,7 +79,7 @@ function SectionTitle({ children }: { children: string }) {
 }
 
 function Row({
-  icon,
+  icon: Icon,
   label,
   value,
   onPress,
@@ -86,7 +87,7 @@ function Row({
   isLast,
   danger,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: LucideIcon;
   label: string;
   value?: string;
   onPress?: () => void;
@@ -97,19 +98,14 @@ function Row({
   const content = (
     <View style={[styles.row, !isLast && styles.rowDivider]}>
       <View style={styles.rowLeft}>
-        <Ionicons
-          name={icon}
-          size={20}
-          color={danger ? colors.danger : colors.textSecondary}
-          style={styles.rowIcon}
-        />
+        <Icon color={danger ? colors.danger : colors.textSecondary} style={styles.rowIcon} />
         <View style={styles.rowTextWrap}>
           <Text style={[styles.rowLabel, danger && styles.rowLabelDanger]}>{label}</Text>
           {value ? <Text style={styles.rowValue}>{value}</Text> : null}
         </View>
       </View>
       {right ?? (onPress ? (
-        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        <ChevronRight color={colors.textSecondary} />
       ) : null)}
     </View>
   );
@@ -248,8 +244,11 @@ export default function ProfileScreen() {
   };
 
   return (
-    <Screen style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <Screen style={styles.screen} edges={['top']} backgroundColor={colors.heroTint}>
+      {/* Who you are is the hero (tinted); settings sit on the white sheet. */}
+      <HeroScroll
+        screenPadded={false}
+        hero={
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
@@ -265,11 +264,11 @@ export default function ProfileScreen() {
             ]}
             accessibilityRole="button"
           >
-            <Ionicons
-              name={isCompliant ? 'shield-checkmark' : 'shield-outline'}
-              size={14}
-              color={isCompliant ? colors.success : colors.warning}
-            />
+            {isCompliant ? (
+              <ShieldCheck size={16} color={colors.success} />
+            ) : (
+              <Shield size={16} color={colors.warning} />
+            )}
             <Text
               style={[
                 styles.complianceBadgeText,
@@ -278,20 +277,21 @@ export default function ProfileScreen() {
             >
               {isCompliant ? 'FIRS Compliant' : 'Not Yet Compliant'}
             </Text>
-            <Ionicons name="chevron-forward" size={12} color={colors.textSecondary} />
+            <ChevronRight size={16} color={colors.textSecondary} />
           </Pressable>
         </View>
-
+        }
+      >
         <SectionTitle>Account</SectionTitle>
         <Card style={styles.sectionCard}>
-          <Row icon="person-outline" label="Personal information" onPress={goToPersonalInfo} />
+          <Row icon={User} label="Personal information" onPress={goToPersonalInfo} />
           <Row
-            icon="lock-closed-outline"
+            icon={Lock}
             label="Change password"
             onPress={() => setActiveModal('password')}
           />
           <Row
-            icon="finger-print-outline"
+            icon={Fingerprint}
             label="Linked identity"
             onPress={() => setActiveModal('identity')}
             isLast
@@ -301,7 +301,7 @@ export default function ProfileScreen() {
         <SectionTitle>Preferences</SectionTitle>
         <Card style={styles.sectionCard}>
           <Row
-            icon="notifications-outline"
+            icon={Bell}
             label="Filing reminders"
             right={
               <Switch
@@ -313,7 +313,7 @@ export default function ProfileScreen() {
             }
           />
           <Row
-            icon="alarm-outline"
+            icon={AlarmClock}
             label="Deadline alerts"
             right={
               <Switch
@@ -325,7 +325,7 @@ export default function ProfileScreen() {
             }
           />
           <Row
-            icon="sparkles-outline"
+            icon={Sparkles}
             label="Read statements with AI"
             value="Suggests your income from the statements you upload"
             right={
@@ -340,7 +340,7 @@ export default function ProfileScreen() {
             }
           />
           <Row
-            icon="mail-outline"
+            icon={Mail}
             label="Email updates"
             value="Product news and tips"
             right={
@@ -358,7 +358,7 @@ export default function ProfileScreen() {
         <SectionTitle>Security</SectionTitle>
         <Card style={styles.sectionCard}>
           <Row
-            icon="keypad-outline"
+            icon={Grid3x3}
             label="Two-factor authentication"
             right={
               <Switch
@@ -370,7 +370,7 @@ export default function ProfileScreen() {
             }
           />
           <Row
-            icon="phone-portrait-outline"
+            icon={Smartphone}
             label="Active sessions"
             value={`${sessions.length} device${sessions.length === 1 ? '' : 's'}`}
             onPress={() => setActiveModal('sessions')}
@@ -381,17 +381,17 @@ export default function ProfileScreen() {
         <SectionTitle>Legal</SectionTitle>
         <Card style={styles.sectionCard}>
           <Row
-            icon="document-text-outline"
+            icon={FileText}
             label="Privacy Policy"
             onPress={() => goToInfoPage('privacy', 'Privacy Policy')}
           />
           <Row
-            icon="document-text-outline"
+            icon={FileText}
             label="Terms of Service"
             onPress={() => goToInfoPage('terms', 'Terms of Service')}
           />
           <Row
-            icon="document-text-outline"
+            icon={FileText}
             label="How We Use Your Data"
             onPress={() => goToInfoPage('data-use', 'How We Use Your Data')}
             isLast
@@ -401,13 +401,13 @@ export default function ProfileScreen() {
         <SectionTitle>Support</SectionTitle>
         <Card style={styles.sectionCard}>
           <Row
-            icon="chatbubble-ellipses-outline"
+            icon={MessageCircleMore}
             label="Contact Us"
             onPress={() => goToInfoPage('contact', 'Contact Us')}
           />
-          <Row icon="help-circle-outline" label="FAQ" onPress={() => goToInfoPage('faq', 'FAQ')} />
+          <Row icon={CircleHelp} label="FAQ" onPress={() => goToInfoPage('faq', 'FAQ')} />
           <Row
-            icon="flag-outline"
+            icon={Flag}
             label="Report a Problem"
             onPress={() => goToInfoPage('report', 'Report a Problem')}
             isLast
@@ -416,14 +416,14 @@ export default function ProfileScreen() {
 
         <Card style={styles.sectionCard}>
           <Row
-            icon="log-out-outline"
+            icon={LogOut}
             label="Sign out"
             onPress={() => setActiveModal('signOut')}
             danger
             isLast
           />
         </Card>
-      </ScrollView>
+      </HeroScroll>
 
       <BottomTabBar active="profile" />
 
@@ -478,7 +478,7 @@ export default function ProfileScreen() {
             {passwordFormError ? <Text style={styles.sheetError}>{passwordFormError}</Text> : null}
             <Button
               label="Update password"
-              variant="dark"
+              variant="primary"
               onPress={handleChangePassword}
               loading={isChangingPassword}
             />
@@ -507,7 +507,7 @@ export default function ProfileScreen() {
                 </View>
                 {isIdentityVerified ? (
                   <View style={styles.identityVerified}>
-                    <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                    <CircleCheck size={16} color={colors.success} />
                     <Text style={styles.identityVerifiedText}>Verified</Text>
                   </View>
                 ) : (
@@ -550,8 +550,8 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sheetTitle}>Sign out?</Text>
             <Text style={styles.sheetBody}>You&apos;ll need to sign in again to access your account.</Text>
-            <Button label="Sign out" variant="dark" onPress={handleSignOut} loading={isSigningOut} />
-            <Button label="Cancel" variant="ghost" onPress={closeModal} style={styles.sheetButtonSpacing} />
+            <Button label="Sign out" variant="destructive" onPress={handleSignOut} loading={isSigningOut} />
+            <Button label="Cancel" variant="secondary" onPress={closeModal} style={styles.sheetButtonSpacing} />
           </View>
         ) : null}
       </BottomSheet>
@@ -585,14 +585,9 @@ const styles = StyleSheet.create({
   screen: {
     paddingHorizontal: 0,
   },
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    paddingTop: spacing.sm,
   },
   avatar: {
     width: 72,

@@ -14,7 +14,7 @@
  * ⚠️ No design for the loading / not-found states or the delete sheet —
  * built from the existing BottomSheet, Button and text styles.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, Lock } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -149,7 +149,7 @@ export default function DocumentDetailScreen() {
 
   const backRow = (
     <Pressable onPress={() => router.back()} style={styles.backRow} hitSlop={8}>
-      <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
+      <ChevronLeft color={colors.textPrimary} />
       <Text style={styles.backLabel}>Documents</Text>
     </Pressable>
   );
@@ -227,14 +227,14 @@ export default function DocumentDetailScreen() {
       <View style={styles.actions}>
         <Button
           label="Open document"
-          variant="dark"
+          variant="primary"
           onPress={handleOpen}
           loading={isOpening}
           disabled={isDeleted}
         />
         {lockedYear !== null ? (
           <View style={styles.lockedRow}>
-            <Ionicons name="lock-closed-outline" size={16} color={colors.textSecondary} />
+            <Lock size={16} color={colors.textSecondary} />
             <Text style={styles.lockedText}>
               This document is part of your submitted {lockedYear} return, so it can&apos;t be
               deleted.
@@ -262,10 +262,10 @@ export default function DocumentDetailScreen() {
           It will be permanently removed from your account. This can&apos;t be undone.
         </Text>
         {deleteError ? <Text style={styles.sheetError}>{deleteError}</Text> : null}
-        <Button label="Delete" variant="dark" onPress={handleDelete} loading={isDeleting} />
+        <Button label="Delete" variant="destructive" onPress={handleDelete} loading={isDeleting} />
         <Button
           label="Cancel"
-          variant="ghost"
+          variant="secondary"
           onPress={() => setIsConfirmingDelete(false)}
           style={styles.sheetButtonSpacing}
         />

@@ -20,7 +20,7 @@
  * app/index.tsx), or on a later launch if the user never finished this
  * step.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -171,7 +171,7 @@ export default function IdentityVerificationScreen() {
 
       {notice ? (
         <View style={styles.notice} accessibilityRole="alert">
-          <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+          <CircleAlert color={colors.danger} />
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}

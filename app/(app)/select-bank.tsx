@@ -7,7 +7,7 @@
  * "Others" placeholder. Saved with the rest of Select Platform when its
  * Continue is tapped.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { Search, Square, SquareCheck } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -45,7 +45,7 @@ function SelectBankContent() {
       </Text>
 
       <View style={styles.searchRow}>
-        <Ionicons name="search" size={18} color={colors.textSecondary} />
+        <Search color={colors.textSecondary} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search"
@@ -69,11 +69,11 @@ function SelectBankContent() {
             >
               <View style={styles.rowTopLine}>
                 <Text style={styles.rowLabel}>{bank}</Text>
-                <Ionicons
-                  name={isSelected ? 'checkbox' : 'square-outline'}
-                  size={20}
-                  color={isSelected ? colors.primary : colors.textSecondary}
-                />
+                {isSelected ? (
+                  <SquareCheck color={colors.primary} />
+                ) : (
+                  <Square color={colors.textSecondary} />
+                )}
               </View>
               {isSelected ? <Text style={styles.autoPullText}>{BANK_STATEMENT_MESSAGE}</Text> : null}
             </Pressable>

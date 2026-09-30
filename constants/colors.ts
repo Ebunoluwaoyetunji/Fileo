@@ -19,16 +19,27 @@ export const colors = {
   textInverse: '#FFFFFF',
 
   success: '#1E8E3E',
+  /** Background of "Completed" / "Submitted" status pills. */
+  successTint: '#DCEFE3',
   warning: '#B8860B',
   warningLight: '#EFE7D8',
   danger: '#D93025',
 
   overlay: 'rgba(17, 20, 23, 0.5)',
 
+  // Buttons. Every primary button uses primaryButton (navy); green is the
+  // accent (success, savings, positive amounts, ticks, highlights), not a
+  // button colour. White on navy: 18:1; white on danger: 4.8:1 (AA).
+  primaryButton: '#0B1628',
+  onPrimaryButton: '#FFFFFF',
+  /** Disabled buttons: flat grey with dark grey text (4.9:1), not faded. */
+  disabledSurface: '#E6E9ED',
+
   // Flat tints (no gradients) for layered, shadow-free surfaces.
   offWhite: '#FAFAF8',
-  /** ~6% forest green on off-white: hero areas. */
-  greenTint: '#ECF2EE',
+  /** ~6% forest green on off-white: hero / top summary areas, and the soft
+   * circles behind list-row icons. */
+  heroTint: '#ECF2EE',
   /** Thin outlines that need to read on white (timeline markers). */
   mutedStroke: '#B8BFC6',
   /** Track of a segmented control. */

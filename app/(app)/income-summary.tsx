@@ -37,7 +37,7 @@
  * built from the existing TextField, checkbox (Select Bank), chip and
  * caption styles.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { CircleCheck, Info, Square, SquareCheck } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -359,7 +359,7 @@ function IncomeSummaryContent() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.incomeTip}>
-          <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+          <Info size={16} color={colors.textSecondary} />
           <Text style={styles.incomeTipText}>
             Money moved between your own accounts, loans, refunds and platform payouts aren’t
             income.
@@ -401,7 +401,7 @@ function IncomeSummaryContent() {
             <Text style={styles.summaryValue}>{formatNaira(totalKobo)}</Text>
           </View>
           <View style={styles.infoNote}>
-            <Ionicons name="information-circle-outline" size={16} color={colors.primaryDark} />
+            <Info size={16} color={colors.primaryDark} />
             <Text style={styles.infoNoteText}>
               Convert foreign earnings to naira using the CBN average exchange rate.
             </Text>
@@ -512,11 +512,11 @@ function IncomeSummaryContent() {
           accessibilityRole="checkbox"
           aria-checked={confirmed}
         >
-          <Ionicons
-            name={confirmed ? 'checkbox' : 'square-outline'}
-            size={22}
-            color={confirmed ? colors.primary : colors.textSecondary}
-          />
+          {confirmed ? (
+            <SquareCheck size={24} color={colors.primary} />
+          ) : (
+            <Square size={24} color={colors.textSecondary} />
+          )}
           <Text style={styles.confirmText}>
             I confirm these amounts are correct and complete for {taxYear}.
           </Text>
@@ -533,12 +533,7 @@ function IncomeSummaryContent() {
 
       <BottomSheet visible={showSuccessSheet} onClose={() => setShowSuccessSheet(false)}>
         <View style={styles.sheetContent}>
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={64}
-            color={colors.backgroundInverse}
-            style={[styles.sheetIcon, styles.sheetIconCentered]}
-          />
+          <CircleCheck size={40} color={colors.backgroundInverse} style={[styles.sheetIcon, styles.sheetIconCentered]} />
           <Text style={styles.sheetTitle}>All transactions reviewed</Text>
           <Text style={styles.sheetBody}>You can now continue with your tax return.</Text>
           <Button label="Continue" onPress={handleContinueFromSheet} loading={isSaving} />

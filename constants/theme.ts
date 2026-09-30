@@ -48,6 +48,11 @@ export const typography = {
   },
 } as const;
 
+/** Lucide icons: one stroke width and a small set of sizes (see DESIGN.md).
+ * `display` is only for large decorative icons (empty states, success). */
+export const iconStroke = 1.75;
+export const iconSizes = { sm: 16, md: 20, lg: 24, display: 40 } as const;
+
 /** Monospaced figures so amounts line up in columns. */
 export const tabularNumbers = { fontVariant: ['tabular-nums' as const] };
 

@@ -14,10 +14,11 @@
  * ⚠️ No design for the loading / couldn't-load states, the reference line,
  * or the Processing / Rejected statuses.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, Circle, CircleAlert, CircleCheck, CircleX, Clock } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { HeroScroll } from '../../components/layout/HeroScroll';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -96,7 +97,7 @@ export default function FilingDetailScreen() {
 
   const backRow = (
     <Pressable onPress={() => router.back()} style={styles.backRow} hitSlop={8}>
-      <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
+      <ChevronLeft color={colors.textPrimary} />
       <Text style={styles.backLabel}>File</Text>
     </Pressable>
   );
@@ -126,10 +127,15 @@ export default function FilingDetailScreen() {
   const steps = getTimelineSteps(filing);
 
   return (
-    <Screen>
+    <Screen backgroundColor={colors.heroTint} edges={['top']}>
       {backRow}
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      {/* The return and where it's at are the hero (tinted); the figures sit
+          on the white sheet below. */}
+      <HeroScroll
+        heroStyle={styles.hero}
+        hero={
+        <>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{filing.taxYear} Tax Return</Text>
           <View style={[styles.statusPill, (isFiled || isRejected) && styles.statusPillMuted]}>
@@ -153,30 +159,22 @@ export default function FilingDetailScreen() {
         <Card style={styles.timelineCard}>
           {steps.map((step, index) => (
             <View key={step.id} style={[styles.stepRow, index > 0 && styles.stepRowSpacing]}>
-              <Ionicons
-                name={
-                  step.state === 'complete'
-                    ? 'checkmark-circle'
-                    : step.state === 'failed'
-                      ? 'close-circle'
-                      : 'ellipse-outline'
-                }
-                size={20}
-                color={
-                  step.state === 'complete'
-                    ? colors.success
-                    : step.state === 'failed'
-                      ? colors.danger
-                      : colors.border
-                }
-              />
+              {step.state === 'complete' ? (
+                <CircleCheck color={colors.success} />
+              ) : step.state === 'failed' ? (
+                <CircleX color={colors.danger} />
+              ) : (
+                <Circle color={colors.mutedStroke} />
+              )}
               <Text style={[styles.stepLabel, step.state === 'pending' && styles.stepLabelPending]}>
                 {step.label}
               </Text>
             </View>
           ))}
         </Card>
-
+        </>
+        }
+      >
         <Card style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryColumn}>
@@ -200,11 +198,11 @@ export default function FilingDetailScreen() {
             </Pressable>
           ) : (
             <View style={styles.pendingNote}>
-              <Ionicons
-                name={isRejected ? 'alert-circle-outline' : 'time-outline'}
-                size={14}
-                color={isRejected ? colors.danger : colors.textSecondary}
-              />
+              {isRejected ? (
+                <CircleAlert size={16} color={colors.danger} />
+              ) : (
+                <Clock size={16} color={colors.textSecondary} />
+              )}
               <Text style={styles.pendingNoteText}>{PENDING_NOTES[filing.status]}</Text>
             </View>
           )}
@@ -242,7 +240,7 @@ export default function FilingDetailScreen() {
             ))
           )}
         </Card>
-      </ScrollView>
+      </HeroScroll>
 
       <Toast
         visible={showReceiptToast}
@@ -270,8 +268,8 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
   },
-  content: {
-    paddingBottom: spacing.xl,
+  hero: {
+    paddingTop: 0,
   },
   titleRow: {
     flexDirection: 'row',
@@ -287,7 +285,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   statusPill: {
-    backgroundColor: '#DCEFE3',
+    backgroundColor: colors.successTint,
     borderRadius: radii.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
@@ -319,8 +317,9 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: spacing.md,
   },
+  // White on the tinted hero.
   timelineCard: {
-    marginBottom: spacing.md,
+    backgroundColor: colors.background,
   },
   stepRow: {
     flexDirection: 'row',

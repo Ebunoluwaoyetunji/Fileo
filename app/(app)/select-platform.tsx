@@ -16,7 +16,7 @@
  * (The server also leaves such payouts out of a bank statement's
  * suggestion.) ⚠️ No Figma design for the tip.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { Info } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RequireDraft, SaveErrorNote, useSaveAndContinue } from '../../components/filing/FilingFlow';
@@ -113,7 +113,7 @@ function SelectPlatformContent() {
 
               {category.title === NIGERIAN_FINTECHS_TITLE ? (
                 <View style={styles.bankTip}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+                  <Info size={16} color={colors.textSecondary} />
                   <Text style={styles.bankTipText}>{BANK_PAYOUTS_TIP}</Text>
                 </View>
               ) : null}

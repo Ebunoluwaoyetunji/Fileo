@@ -9,7 +9,7 @@
  * ⚠️ No Figma design for this screen — built from the existing Screen,
  * Card, Button and text styles.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { Building2, CircleCheck, FileText, type LucideIcon, Sparkles, SquarePen } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -21,29 +21,29 @@ import { spacing, typography } from '../../constants/theme';
 import { setAiConsent } from '../../lib/extractions';
 import { useAuth } from '../../state/authContext';
 
-const POINTS: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
+const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
-    icon: 'document-text-outline',
+    icon: FileText,
     title: 'What we send',
     body: 'Only the statements you upload for your return: bank, wallet and platform statements. Your receipts and other documents are never sent.',
   },
   {
-    icon: 'business-outline',
+    icon: Building2,
     title: 'Who reads them',
     body: 'Anthropic, the company that makes the Claude AI, reads each statement for us and sends back the payments it finds. Anthropic doesn’t use your statements to train its AI.',
   },
   {
-    icon: 'sparkles-outline',
+    icon: Sparkles,
     title: 'Why',
     body: 'To find the money you received and suggest your income for the year, so you don’t have to add it all up yourself.',
   },
   {
-    icon: 'checkmark-circle-outline',
+    icon: CircleCheck,
     title: 'You stay in control',
     body: 'You always check and confirm the numbers before anything is filed. If we’re not sure about a payment, we’ll ask you.',
   },
   {
-    icon: 'create-outline',
+    icon: SquarePen,
     title: 'Prefer not to?',
     body: 'Choose “Enter manually” and type your income yourself. You can change your mind at any time in Profile.',
   },
@@ -85,7 +85,7 @@ export default function AiConsentScreen() {
         <Card style={styles.card}>
           {POINTS.map((point) => (
             <View key={point.title} style={styles.point}>
-              <Ionicons name={point.icon} size={22} color={colors.primary} />
+              <point.icon size={24} color={colors.primary} />
               <View style={styles.pointText}>
                 <Text style={styles.pointTitle}>{point.title}</Text>
                 <Text style={styles.pointBody}>{point.body}</Text>
@@ -98,7 +98,7 @@ export default function AiConsentScreen() {
       <Button label="Allow" onPress={() => choose(true)} loading={saving === 'allow'} />
       <Button
         label="Enter manually"
-        variant="ghost"
+        variant="secondary"
         onPress={() => choose(false)}
         loading={saving === 'manual'}
         style={styles.secondButton}

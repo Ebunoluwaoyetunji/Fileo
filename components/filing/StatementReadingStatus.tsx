@@ -10,7 +10,7 @@
  * ⚠️ No Figma design for any of these states — built from the existing
  * caption text styles, icons and colour tokens.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { CircleAlert, CircleCheck, Info } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
@@ -40,7 +40,7 @@ export function StatementReadingStatus({ documentId, variant = 'compact' }: Prop
   if (startError && !isReading(extraction)) {
     return (
       <View style={styles.row}>
-        <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+        <Info size={16} color={colors.warning} />
         <Text style={styles.warningText}>{startError}</Text>
       </View>
     );
@@ -63,7 +63,7 @@ export function StatementReadingStatus({ documentId, variant = 'compact' }: Prop
     return (
       <View style={styles.block}>
         <View style={styles.row}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+          <CircleCheck size={16} color={colors.success} />
           <Text style={styles.text}>
             {period ? `Statement read: ${period}` : 'Statement read'}
           </Text>
@@ -71,7 +71,7 @@ export function StatementReadingStatus({ documentId, variant = 'compact' }: Prop
         {variant === 'full'
           ? extraction.warnings.map((warning) => (
               <View key={warning} style={styles.row}>
-                <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                <CircleAlert size={16} color={colors.warning} />
                 <Text style={styles.warningText}>{warningMessage(warning, extraction, taxYear)}</Text>
               </View>
             ))
@@ -83,7 +83,7 @@ export function StatementReadingStatus({ documentId, variant = 'compact' }: Prop
   const retry = canRetry(extraction) && aiConsent === 'allowed';
   return (
     <View style={styles.row}>
-      <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+      <CircleAlert size={16} color={colors.warning} />
       <View style={styles.failure}>
         <Text style={styles.warningText}>{failureMessage(extraction)}</Text>
         {retry ? (

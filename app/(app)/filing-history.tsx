@@ -6,11 +6,11 @@
  *
  * States (per the user's own designs):
  *  - not-started (no draft and no history): the design tool's own layout/
- *    copy, with the "dark" Button variant (colors.backgroundInverse), the
- *    same one Home uses for the identical "start a filing" action. The tax
- *    year and deadline line follow the current tax year.
- *  - in-progress (a draft exists): a resume screen — the 5-step checklist
- *    and the documents still needed, from what's saved on the draft, plus
+ *    copy, with the primary Button (navy, like every primary action). The
+ *    tax year and deadline line follow the current tax year.
+ *  - in-progress (a draft exists): a resume screen — the return and its
+ *    5-step checklist on the tinted hero (HeroScroll), then the documents
+ *    still needed, from what's saved on the draft, plus
  *    any past filings below it (history and in-progress show together).
  *    "Continue filing" opens the draft at its saved step. "Documents still
  *    needed" is the server's own list of empty document slots (platform
@@ -23,8 +23,7 @@
  * ⚠️ No design for the loading and couldn't-load states, or for the
  * Processing / Rejected statuses — built from the existing styles.
  */
-import { Ionicons } from '@expo/vector-icons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { ChevronRight, Circle, CircleAlert, CircleCheck, Clock, ExternalLink, FilePlus } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -35,6 +34,7 @@ import {
 } from '../../components/documents/useDocumentUploader';
 import { useMissingItems, useStartFiling } from '../../components/filing/FilingFlow';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
+import { HeroScroll } from '../../components/layout/HeroScroll';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -71,15 +71,13 @@ function NotStartedState() {
   return (
     <View style={styles.emptyState}>
       <View style={styles.emptyIconCircle}>
-        <MaterialCommunityIcons name="file-plus-outline" size={36} color={colors.textPrimary} />
+        <FilePlus size={40} color={colors.textPrimary} />
       </View>
       <Text style={styles.emptyTitle}>You haven&apos;t filed for {taxYear} yet</Text>
       <Text style={styles.emptyBody}>{deadlineLine(taxYear)}</Text>
-      {/* "dark" variant — see file header on why this differs from the
-          design tool's own button color. */}
       <Button
         label="File now"
-        variant="dark"
+        variant="primary"
         onPress={start}
         loading={isStarting}
         style={styles.emptyButton}
@@ -159,27 +157,36 @@ function InProgressState({ draft }: { draft: Filing }) {
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.inProgressContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Your {draft.taxYear} return</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
-        <Text style={styles.stepsComplete}>
-          {completedCount} of {steps.length} steps complete.
-        </Text>
+      {/* The return in progress is the hero (tinted); the rest sits on the
+          white sheet below. */}
+      <HeroScroll
+        heroStyle={styles.hero}
+        hero={
+          <>
+            <Text style={styles.title}>Your {draft.taxYear} return</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text style={styles.stepsComplete}>
+              {completedCount} of {steps.length} steps complete.
+            </Text>
 
-        <Card style={styles.stepsCard}>
-          {steps.map((step) => (
-            <View key={step.id} style={styles.stepRow}>
-              <Ionicons
-                name={step.complete ? 'checkmark-circle' : 'ellipse-outline'}
-                size={20}
-                color={step.complete ? colors.success : colors.border}
-              />
-              <Text style={[styles.stepLabel, !step.complete && styles.stepLabelPending]}>
-                {step.label}
-              </Text>
-            </View>
-          ))}
-        </Card>
+            <Card style={styles.stepsCard}>
+              {steps.map((step) => (
+                <View key={step.id} style={styles.stepRow}>
+                  {step.complete ? (
+                    <CircleCheck color={colors.success} />
+                  ) : (
+                    <Circle color={colors.mutedStroke} />
+                  )}
+                  <Text style={[styles.stepLabel, !step.complete && styles.stepLabelPending]}>
+                    {step.label}
+                  </Text>
+                </View>
+              ))}
+            </Card>
+          </>
+        }
+        sheetStyle={styles.inProgressSheet}
+      >
 
         {neededDocuments.length > 0 ? (
           <>
@@ -202,7 +209,7 @@ function InProgressState({ draft }: { draft: Filing }) {
                         accessibilityRole="button"
                       >
                         <Text style={styles.howToText}>How to get this</Text>
-                        <Ionicons name="open-outline" size={13} color={colors.primary} />
+                        <ExternalLink size={16} color={colors.primary} />
                       </Pressable>
                     </View>
                     {uploadState.status === 'uploading' ? (
@@ -228,15 +235,17 @@ function InProgressState({ draft }: { draft: Filing }) {
             ))}
           </>
         ) : null}
-      </ScrollView>
+      </HeroScroll>
 
-      <Button
-        label="Continue filing"
-        variant="dark"
-        onPress={start}
-        loading={isStarting}
-        style={styles.continueFilingButton}
-      />
+      <View style={styles.bottomBar}>
+        <Button
+          label="Continue filing"
+          variant="primary"
+          onPress={start}
+          loading={isStarting}
+          style={styles.continueFilingButton}
+        />
+      </View>
 
       <Toast
         key={toastMessage ?? 'none'}
@@ -290,7 +299,7 @@ function HistoryCard({ entry }: { entry: FilingHistoryEntry }) {
                 {STATUS_LABELS[entry.status]}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+            <ChevronRight size={16} color={colors.textSecondary} />
           </View>
         </View>
 
@@ -321,11 +330,11 @@ function HistoryCard({ entry }: { entry: FilingHistoryEntry }) {
               </View>
             </View>
             <View style={styles.pendingNote}>
-              <Ionicons
-                name={isRejected ? 'alert-circle-outline' : 'time-outline'}
-                size={14}
-                color={isRejected ? colors.danger : colors.textSecondary}
-              />
+              {isRejected ? (
+                <CircleAlert size={16} color={colors.danger} />
+              ) : (
+                <Clock size={16} color={colors.textSecondary} />
+              )}
               <Text style={styles.pendingNoteText}>{PENDING_NOTES[entry.status]}</Text>
             </View>
           </>
@@ -357,7 +366,7 @@ function HistoryState() {
       {!hasFiledCurrentYear ? (
         <Button
           label={`Start ${currentTaxYear()} filing`}
-          variant="dark"
+          variant="primary"
           onPress={start}
           loading={isStarting}
           style={styles.continueFilingButton}
@@ -400,8 +409,10 @@ export default function FilingHistoryScreen() {
     content = <NotStartedState />;
   }
 
+  // The return in progress gets the tinted hero; the other states stay white.
+  const hasHero = !isLoading && !!draft;
   return (
-    <Screen style={styles.screen}>
+    <Screen style={styles.screen} edges={['top']} backgroundColor={hasHero ? colors.heroTint : colors.background}>
       <View style={styles.content}>{content}</View>
       <BottomTabBar active="file" />
     </Screen>
@@ -465,8 +476,18 @@ const styles = StyleSheet.create({
   },
 
   // --- In-progress state ---
-  inProgressContent: {
+  hero: {
+    paddingTop: 0,
+  },
+  inProgressSheet: {
+    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
+  },
+  // White under the button, so the tint stops at the sheet.
+  bottomBar: {
+    backgroundColor: colors.background,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   stepsComplete: {
     ...typography.bodyStrong,
@@ -475,11 +496,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
+  // A white card on the tinted hero.
   stepsCard: {
-    backgroundColor: colors.warningLight,
-    borderWidth: 0,
+    backgroundColor: colors.background,
     gap: spacing.md,
-    marginBottom: spacing.lg,
   },
   stepRow: {
     flexDirection: 'row',
@@ -567,7 +587,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   statusPill: {
-    backgroundColor: '#DCEFE3',
+    backgroundColor: colors.successTint,
     borderRadius: radii.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,

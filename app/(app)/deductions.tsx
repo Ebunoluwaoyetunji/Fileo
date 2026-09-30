@@ -33,7 +33,7 @@
  * off with the reason from the rules, and isn't claimed.
  * ⚠️ No Figma design for the amount field or the not-available state.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { CircleCheck, CloudUpload, Info } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { TextField } from '../../components/ui/TextField';
 import { getTaxRules, ReliefRule } from '../../lib/filings';
@@ -252,7 +252,7 @@ function DeductionsContent() {
                   </Text>
                 ) : (
                   <View style={styles.notAvailableRow}>
-                    <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+                    <Info size={16} color={colors.textSecondary} />
                     <Text style={styles.notAvailableText}>
                       Not available for {taxYear}.{' '}
                       {reliefRules?.[deduction.id]?.reason ?? ''}
@@ -284,7 +284,7 @@ function DeductionsContent() {
                   ) : isUploaded ? (
                     <View style={styles.uploadedRow}>
                       <View style={styles.uploadedLeft}>
-                        <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                        <CircleCheck color={colors.success} />
                         <Text style={styles.uploadedText}>Document uploaded</Text>
                       </View>
                       <Pressable
@@ -301,11 +301,7 @@ function DeductionsContent() {
                         onPress={() => handleUploadDocument(deduction.id)}
                         style={[styles.uploadPrompt, showError && styles.uploadPromptError]}
                       >
-                        <Ionicons
-                          name="cloud-upload-outline"
-                          size={20}
-                          color={showError ? colors.danger : colors.textSecondary}
-                        />
+                        <CloudUpload color={showError ? colors.danger : colors.textSecondary} />
                         <Text
                           style={[styles.uploadPromptText, showError && styles.uploadPromptTextError]}
                         >

@@ -14,7 +14,7 @@
  *
  * ⚠️ PLACEHOLDER UI — no Figma frame for this screen either.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
@@ -151,7 +151,7 @@ export default function EditProfileScreen() {
   return (
     <Screen>
       <Pressable onPress={() => router.back()} style={styles.backRow} hitSlop={8}>
-        <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
+        <ChevronLeft color={colors.textPrimary} />
         <Text style={styles.backLabel}>Profile</Text>
       </Pressable>
 
@@ -205,7 +205,7 @@ export default function EditProfileScreen() {
 
         <Button
           label="Save changes"
-          variant="dark"
+          variant="primary"
           onPress={handleSave}
           loading={isSaving}
           style={styles.saveButton}

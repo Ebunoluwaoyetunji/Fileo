@@ -114,7 +114,7 @@ export function OnboardingScreen({
           <ProgressDots total={totalSteps} current={step} activeColor={activeDotColor} />
           <Button
             label="Create Account"
-            variant="dark"
+            variant="primary"
             onPress={finishOnboarding}
             style={styles.cta}
           />

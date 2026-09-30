@@ -9,7 +9,7 @@
  * Documents tabs (icon in a circle, title, body). If/when real
  * notifications exist, this is where a list of them would render instead.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { Bell, ChevronLeft } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
@@ -20,7 +20,7 @@ export default function NotificationsScreen() {
   return (
     <Screen>
       <Pressable onPress={() => router.back()} style={styles.backRow} hitSlop={8}>
-        <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
+        <ChevronLeft color={colors.textPrimary} />
         <Text style={styles.backLabel}>Home</Text>
       </Pressable>
 
@@ -28,7 +28,7 @@ export default function NotificationsScreen() {
 
       <View style={styles.emptyState}>
         <View style={styles.emptyIconCircle}>
-          <Ionicons name="notifications-outline" size={32} color={colors.textSecondary} />
+          <Bell size={40} color={colors.textSecondary} />
         </View>
         <Text style={styles.emptyTitle}>No notifications yet</Text>
         <Text style={styles.emptyBody}>

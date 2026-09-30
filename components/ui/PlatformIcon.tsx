@@ -9,6 +9,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { colors } from '../../constants/colors';
 import { typography } from '../../constants/theme';
 
 const PALETTE = ['#0B6E4F', '#208AEF', '#D93025', '#B8860B', '#2C5A48', '#6B4EFF', '#C2410C'];
@@ -53,6 +54,6 @@ const styles = StyleSheet.create({
   },
   text: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.textInverse,
   },
 });

@@ -9,7 +9,7 @@
  * stack rather than remounting it, so locally-held state (and everything in
  * FilingContext) is exactly as the user left it.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import { colors } from '../../constants/colors';
@@ -28,7 +28,7 @@ export function BackButton({ style }: BackButtonProps) {
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >
-      <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+      <ArrowLeft size={24} color={colors.textPrimary} />
     </Pressable>
   );
 }

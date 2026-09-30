@@ -13,11 +13,12 @@
  * server returned when the return was submitted (passed from Return
  * Review). ⚠️ The reference line has no Figma design.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { Clock } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { HeroScroll } from '../../components/layout/HeroScroll';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Toast } from '../../components/ui/Toast';
@@ -49,7 +50,7 @@ type Step = {
 };
 
 const STATUS_STYLES: Record<StepStatus, { bg: string; text: string; label: string }> = {
-  completed: { bg: '#DCEFE3', text: colors.success, label: 'Completed' },
+  completed: { bg: colors.successTint, text: colors.success, label: 'Completed' },
   'in-progress': { bg: colors.warningLight, text: colors.warning, label: 'In progress' },
   waiting: { bg: colors.border, text: colors.textSecondary, label: 'Waiting' },
 };
@@ -89,10 +90,13 @@ export default function ConfirmationScreen() {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.handle} />
-
+    <Screen backgroundColor={colors.heroTint} edges={['top']}>
+      {/* The approval is the hero (tinted); progress and actions sit on the
+          white sheet below. */}
+      <HeroScroll
+        heroStyle={styles.hero}
+        hero={
+      <>
       <Image source={sealIcon} style={styles.icon} contentFit="contain" />
       <Text style={styles.title}>Your return has been approved.</Text>
       <Text style={styles.subtitle}>
@@ -108,7 +112,9 @@ export default function ConfirmationScreen() {
           </Text>
         </View>
       ) : null}
-
+      </>
+        }
+      >
       <View style={styles.stepperCard}>
         {steps.map((step, index) => {
           const statusStyle = STATUS_STYLES[step.status];
@@ -138,7 +144,7 @@ export default function ConfirmationScreen() {
                   </View>
                   {step.status === 'in-progress' && step.meta ? (
                     <View style={styles.stepMetaRow}>
-                      <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+                      <Clock size={16} color={colors.textSecondary} />
                       <Text style={styles.stepMetaText}>{step.meta}</Text>
                     </View>
                   ) : null}
@@ -159,12 +165,12 @@ export default function ConfirmationScreen() {
 
       <Button
         label="Download Summary"
-        variant="dark"
+        variant="primary"
         onPress={() => setShowDownloadToast(true)}
         style={styles.downloadButton}
       />
-      <Button label="Done" variant="ghost" onPress={handleDone} />
-      </ScrollView>
+      <Button label="Done" variant="secondary" onPress={handleDone} />
+      </HeroScroll>
 
       <Toast
         visible={showDownloadToast}
@@ -176,17 +182,8 @@ export default function ConfirmationScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    paddingBottom: spacing.lg,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radii.full,
-    backgroundColor: colors.border,
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
+  hero: {
+    paddingTop: spacing.lg,
   },
   icon: {
     width: 64,
@@ -208,7 +205,6 @@ const styles = StyleSheet.create({
   },
   referenceRow: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
   },
   referenceLabel: {
     ...typography.caption,

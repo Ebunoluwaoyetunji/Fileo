@@ -20,7 +20,7 @@
  * files the upload under that tax year and fills that slot of the draft.
  * ⚠️ No design for that sheet.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronRight, FileText, Folder, Image as ImageIcon } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -131,7 +131,7 @@ export default function DocumentsScreen() {
     body = (
       <View style={styles.emptyState}>
         <View style={styles.emptyIconCircle}>
-          <Ionicons name="folder-outline" size={32} color={colors.textSecondary} />
+          <Folder size={40} color={colors.textSecondary} />
         </View>
         <Text style={styles.emptyTitle}>No documents yet</Text>
         <Text style={styles.emptyBody}>
@@ -140,7 +140,7 @@ export default function DocumentsScreen() {
         </Text>
         <Button
           label="Upload document"
-          variant="dark"
+          variant="primary"
           onPress={handleUpload}
           style={styles.emptyButton}
         />
@@ -153,7 +153,7 @@ export default function DocumentsScreen() {
         <Text style={styles.subtitle}>Saved to your account</Text>
         <Button
           label="Upload document"
-          variant="dark"
+          variant="primary"
           onPress={handleUpload}
           loading={isUploading}
           style={styles.uploadButton}
@@ -183,11 +183,11 @@ export default function DocumentsScreen() {
             >
               <Card style={styles.docCard}>
                 <View style={styles.docIconCircle}>
-                  <Ionicons
-                    name={document.mime_type.startsWith('image/') ? 'image-outline' : 'document-text-outline'}
-                    size={22}
-                    color={colors.primaryDark}
-                  />
+                  {document.mime_type.startsWith('image/') ? (
+                    <ImageIcon size={24} color={colors.primaryDark} />
+                  ) : (
+                    <FileText size={24} color={colors.primaryDark} />
+                  )}
                 </View>
                 <View style={styles.docTextWrap}>
                   <Text style={styles.docTitle} numberOfLines={1}>
@@ -198,7 +198,7 @@ export default function DocumentsScreen() {
                     {formatFileSize(document.size_bytes)}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                <ChevronRight color={colors.textSecondary} />
               </Card>
             </Pressable>
           ))}
@@ -208,7 +208,7 @@ export default function DocumentsScreen() {
   }
 
   return (
-    <Screen style={styles.screen}>
+    <Screen style={styles.screen} edges={['top']}>
       <View style={styles.content}>
         <Text style={styles.title}>Documents</Text>
         {body}

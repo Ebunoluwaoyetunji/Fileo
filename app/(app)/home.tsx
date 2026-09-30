@@ -37,12 +37,13 @@
  *    for when its period "opens") rather than hardcoded, so they don't go
  *    stale.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { Bell, Info, Plus } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
+import { HeroScroll } from '../../components/layout/HeroScroll';
 import { useStartFiling } from '../../components/filing/FilingFlow';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
@@ -56,6 +57,10 @@ import { currentTaxYear } from '../../lib/filings';
 import { taxSavedKobo } from '../../lib/filings';
 import { formatNaira } from '../../lib/money';
 import { useFiling } from '../../state/filingContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+/** Above the tab bar; the bottom safe area is added at render time. */
+const FAB_BOTTOM = spacing.xxl + spacing.md;
 
 const FILING_HISTORY_ROUTE = '/(app)/filing-history' as const;
 const filingIllustration = require('../../assets/images/home-filing-illustration.png');
@@ -130,51 +135,64 @@ export default function HomeScreen() {
   const timeGreeting = getTimeGreeting(now.getHours());
   const greeting = firstName ? `${timeGreeting} ${firstName}` : timeGreeting;
 
+  const insets = useSafeAreaInsets();
   const goToFilingHistory = () => router.push(FILING_HISTORY_ROUTE);
   const goToNotifications = () => router.push('/(app)/notifications');
 
-  return (
-    <Screen style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={styles.greeting}>{greeting}</Text>
-          <Pressable
-            onPress={goToNotifications}
-            style={styles.notificationButton}
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-          >
-            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
-          </Pressable>
-        </View>
+  // The greeting and status card are the hero (tinted); the rest sits on the
+  // white sheet below.
+  const hero = (
+    <>
+      <View style={styles.header}>
+        <Text style={styles.greeting}>{greeting}</Text>
+        <Pressable
+          onPress={goToNotifications}
+          style={styles.notificationButton}
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+        >
+          <Bell size={24} color={colors.textPrimary} />
+        </Pressable>
+      </View>
+      {latestFiling ? (
+        <GradientBackground
+          colors={[colors.backgroundInverse, colors.forestDeep]}
+          style={styles.complianceCard}
+          contentStyle={styles.complianceCardContent}
+        >
+          <View>
+            <View style={styles.compliantPill}>
+              <Text style={styles.compliantPillText}>You&apos;re tax compliant</Text>
+            </View>
+            <Text style={styles.complianceText}>
+              Your {latestFiling.taxYear} tax return was filed on{' '}
+              {formatDate(latestFiling.submittedAt)}.
+            </Text>
+          </View>
+          {/* Secondary (white) so it reads on the dark card. */}
+          <Button
+            label="View filing receipt"
+            variant="secondary"
+            onPress={goToFilingHistory}
+            style={styles.receiptButton}
+          />
+        </GradientBackground>
+      ) : (
+        <Card style={styles.noticeCard}>
+          <Text style={styles.noticeTitle}>Tax filing deadline matter</Text>
+          <Text style={styles.noticeBody}>
+            Filing on time helps you stay compliant and avoid unnecessary penalties
+          </Text>
+        </Card>
+      )}
+    </>
+  );
 
+  return (
+    <Screen style={styles.screen} edges={['top']} backgroundColor={colors.heroTint}>
+      <HeroScroll screenPadded={false} hero={hero} heroStyle={styles.hero} sheetStyle={styles.sheet}>
         {latestFiling ? (
           <>
-            <GradientBackground
-              colors={[colors.backgroundInverse, colors.forestDeep]}
-              style={styles.complianceCard}
-              contentStyle={styles.complianceCardContent}
-            >
-              <View>
-                <View style={styles.compliantPill}>
-                  <Text style={styles.compliantPillText}>You&apos;re tax compliant</Text>
-                </View>
-                <Text style={styles.complianceText}>
-                  Your {latestFiling.taxYear} tax return was filed on{' '}
-                  {formatDate(latestFiling.submittedAt)}.
-                </Text>
-              </View>
-              <Button
-                label="View filing receipt"
-                variant="dark"
-                onPress={goToFilingHistory}
-                style={styles.receiptButton}
-              />
-            </GradientBackground>
-
             <Text style={styles.sectionTitle}>Quick Stats</Text>
             <ScrollView
               horizontal
@@ -224,12 +242,7 @@ export default function HomeScreen() {
 
             {nextFilingYear !== undefined ? (
               <View style={styles.nextFilingNote}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color={colors.primaryDark}
-                  style={styles.nextFilingIcon}
-                />
+                <Info size={16} color={colors.primaryDark} style={styles.nextFilingIcon} />
                 <View style={styles.nextFilingTextWrap}>
                   <Text style={styles.nextFilingTitle}>Your next filing</Text>
                   <Text style={styles.nextFilingBody}>
@@ -242,13 +255,6 @@ export default function HomeScreen() {
           </>
         ) : (
           <>
-            <Card style={styles.noticeCard}>
-              <Text style={styles.noticeTitle}>Tax filing deadline matter</Text>
-              <Text style={styles.noticeBody}>
-                Filing on time helps you stay compliant and avoid unnecessary penalties
-              </Text>
-            </Card>
-
             <Card style={styles.filingCard}>
               <Image
                 source={filingIllustration}
@@ -264,7 +270,7 @@ export default function HomeScreen() {
 
               <Button
                 label="Start Filing now"
-                variant="dark"
+                variant="primary"
                 onPress={goToFiling}
                 loading={isStarting}
                 style={styles.startFilingButton}
@@ -272,15 +278,15 @@ export default function HomeScreen() {
             </Card>
           </>
         )}
-      </ScrollView>
+      </HeroScroll>
 
       <Pressable
         onPress={goToFiling}
-        style={styles.fab}
+        style={[styles.fab, { bottom: FAB_BOTTOM + insets.bottom }]}
         accessibilityRole="button"
         accessibilityLabel="Start a new filing"
       >
-        <Ionicons name="add" size={28} color={colors.textInverse} />
+        <Plus size={24} color={colors.textInverse} />
       </Pressable>
 
       <BottomTabBar active="home" />
@@ -299,10 +305,12 @@ const styles = StyleSheet.create({
   screen: {
     paddingHorizontal: 0,
   },
-  content: {
-    paddingHorizontal: layout.screenPadding,
+  hero: {
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xxl,
+  },
+  // Room under the last card for the "+" button.
+  sheet: {
+    paddingBottom: spacing.xxl + spacing.xl,
   },
   header: {
     flexDirection: 'row',
@@ -323,7 +331,6 @@ const styles = StyleSheet.create({
   // --- Already-filed state ---
   complianceCard: {
     borderRadius: radii.lg,
-    marginBottom: spacing.lg,
     // A definite (not min-) height, not just content-driven sizing — the
     // gradient SVG's own width="100%"/height="100%" only resolves against
     // a parent with a definite size; a plain flex/auto-sized box lets the
@@ -432,7 +439,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   completedPill: {
-    backgroundColor: '#DCEFE3',
+    backgroundColor: colors.successTint,
     borderRadius: radii.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
@@ -470,10 +477,9 @@ const styles = StyleSheet.create({
   },
 
   // --- Not-yet-filed state ---
+  // A white card on the tinted hero.
   noticeCard: {
-    backgroundColor: colors.warningLight,
-    borderWidth: 0,
-    marginBottom: spacing.md,
+    backgroundColor: colors.background,
   },
   noticeTitle: {
     ...typography.bodyStrong,
@@ -511,17 +517,13 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: layout.screenPadding,
-    bottom: spacing.xxl + spacing.md,
+    bottom: FAB_BOTTOM,
     width: 56,
     height: 56,
     borderRadius: radii.full,
-    backgroundColor: colors.backgroundInverse,
+    // A primary action: the button token, and no shadow (flat design).
+    backgroundColor: colors.primaryButton,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: colors.textPrimary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
   },
 });

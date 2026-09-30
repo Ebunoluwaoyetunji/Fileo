@@ -15,7 +15,6 @@
  * ⚠️ No Figma design for this screen — built from the existing Screen,
  * BackButton, Card and caption/link styles.
  */
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';

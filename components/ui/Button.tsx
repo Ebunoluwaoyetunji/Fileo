@@ -1,3 +1,13 @@
+/**
+ * The app's one button. Three variants, one style each (see DESIGN.md):
+ *   primary      navy (colors.primaryButton), white text: the main action
+ *   secondary    white with a hairline border, navy text: the other option
+ *                (Cancel, Try again, Enter manually)
+ *   destructive  red (colors.danger), white text: deleting or signing out
+ * All are pill-shaped. Disabled is a flat grey with dark grey text (not a
+ * faded colour), loading keeps the colour and shows a spinner, pressed dims
+ * slightly.
+ */
 import React from 'react';
 import {
   ActivityIndicator,
@@ -11,7 +21,7 @@ import {
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'dark';
+type ButtonVariant = 'primary' | 'secondary' | 'destructive';
 
 type ButtonProps = {
   label: string;
@@ -31,6 +41,8 @@ export function Button({
   style,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  // Loading keeps the variant's colour; only a real "can't do this yet" greys out.
+  const showDisabled = disabled && !loading;
 
   return (
     <Pressable
@@ -41,17 +53,17 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         variantStyles[variant],
-        isDisabled && styles.disabled,
+        showDisabled && (variant === 'secondary' ? styles.disabledOutline : styles.disabledFill),
         pressed && !isDisabled && styles.pressed,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color={variant === 'primary' || variant === 'dark' ? colors.textInverse : colors.primary}
-        />
+        <ActivityIndicator color={variant === 'secondary' ? colors.primaryButton : colors.onPrimaryButton} />
       ) : (
-        <Text style={[styles.label, textVariantStyles[variant]]}>{label}</Text>
+        <Text style={[styles.label, textVariantStyles[variant], showDisabled && styles.disabledText]}>
+          {label}
+        </Text>
       )}
     </Pressable>
   );
@@ -59,17 +71,25 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
+    borderRadius: radii.full,
+    minHeight: 52,
+    paddingVertical: spacing.sm + 6,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
     ...typography.bodyStrong,
+    textAlign: 'center',
   },
-  disabled: {
-    opacity: 0.5,
+  disabledFill: {
+    backgroundColor: colors.disabledSurface,
+  },
+  disabledOutline: {
+    borderColor: colors.disabledSurface,
+  },
+  disabledText: {
+    color: colors.textSecondary,
   },
   pressed: {
     opacity: 0.85,
@@ -78,32 +98,26 @@ const styles = StyleSheet.create({
 
 const variantStyles = StyleSheet.create({
   primary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryButton,
   },
   secondary: {
-    backgroundColor: colors.primaryLight,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  dark: {
-    backgroundColor: colors.backgroundInverse,
+  destructive: {
+    backgroundColor: colors.danger,
   },
 });
 
 const textVariantStyles = StyleSheet.create({
   primary: {
-    color: colors.textInverse,
+    color: colors.onPrimaryButton,
   },
   secondary: {
-    color: colors.primary,
+    color: colors.primaryButton,
   },
-  ghost: {
-    color: colors.textPrimary,
-  },
-  dark: {
-    color: colors.textInverse,
+  destructive: {
+    color: colors.onPrimaryButton,
   },
 });

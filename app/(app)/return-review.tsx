@@ -252,7 +252,7 @@ function ReturnReviewContent() {
   const editDeductions = () => openFix({ id: 'edit-deductions', label: 'Deductions', step: 'deductions' });
 
   return (
-    <Screen backgroundColor={colors.greenTint} edges={['top']}>
+    <Screen backgroundColor={colors.heroTint} edges={['top']}>
       <View style={styles.header}>
         <BackButton style={styles.backButton} />
       </View>
@@ -266,7 +266,7 @@ function ReturnReviewContent() {
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
-            <ReceiptText size={20} strokeWidth={1.5} color={colors.backgroundInverse} />
+            <ReceiptText size={20} color={colors.backgroundInverse} />
           </View>
           <Text style={styles.heroLabel} accessibilityRole="header">
             {taxYear} · {STATE_LABEL}
@@ -286,7 +286,7 @@ function ReturnReviewContent() {
           </Text>
           {savedKobo > 0 ? (
             <View style={styles.savedChip}>
-              <PiggyBank size={15} strokeWidth={1.75} color={colors.primary} />
+              <PiggyBank size={16} color={colors.primary} />
               <Text style={styles.savedChipText}>Deductions saved you {formatNaira(savedKobo)}</Text>
             </View>
           ) : null}
@@ -299,7 +299,7 @@ function ReturnReviewContent() {
               <Text style={styles.missingTitle}>Finish these before you submit</Text>
               {missingDetails.map((item) => (
                 <View key={item.id} style={styles.missingRow}>
-                  <CircleAlert size={18} strokeWidth={1.75} color={colors.amberText} />
+                  <CircleAlert size={20} color={colors.amberText} />
                   <Text style={styles.missingLabel}>{item.label}</Text>
                   <Pressable
                     onPress={() => openFix(item)}
@@ -373,7 +373,6 @@ function ReturnReviewContent() {
           variant="primary"
           onPress={() => setShowSubmitSheet(true)}
           disabled={!canSubmit}
-          style={styles.approveButton}
         />
       </View>
 
@@ -389,14 +388,14 @@ function ReturnReviewContent() {
             <Text style={styles.submittingToLabel}>Submitting to:</Text>
             <View style={styles.submittingToBadge}>
               <View style={styles.badge}>
-                <Landmark size={16} strokeWidth={1.75} color={colors.primary} />
+                <Landmark size={16} color={colors.primary} />
               </View>
               <Text style={styles.submittingToName}>Federal Inland Revenue Service (FIRS)</Text>
             </View>
           </View>
 
           <View style={styles.declaration}>
-            <Info size={14} strokeWidth={1.75} color={colors.textSecondary} style={styles.declarationIcon} />
+            <Info size={16} color={colors.textSecondary} style={styles.declarationIcon} />
             <Text style={styles.declarationText}>
               By submitting, you confirm that the information provided is accurate to the best of
               your knowledge.
@@ -405,13 +404,13 @@ function ReturnReviewContent() {
 
           <Button
             label="Yes, submit my return"
-            variant="dark"
+            variant="primary"
             onPress={handleSubmit}
             loading={isSubmitting}
           />
           <Button
             label="Not yet — let me review again"
-            variant="ghost"
+            variant="secondary"
             onPress={() => setShowSubmitSheet(false)}
             style={styles.sheetSecondaryButton}
           />
@@ -469,9 +468,9 @@ function SummaryTab({
               first={index === 0}
               badge={
                 isNigerianBank(source.label) ? (
-                  <Landmark size={16} strokeWidth={1.75} color={colors.primary} />
+                  <Landmark size={16} color={colors.primary} />
                 ) : (
-                  <Wallet size={16} strokeWidth={1.75} color={colors.primary} />
+                  <Wallet size={16} color={colors.primary} />
                 )
               }
               label={source.label}
@@ -508,7 +507,7 @@ function SummaryTab({
                 key={deduction.id}
                 first={index === 0}
                 muted={notApplied}
-                badge={<Icon size={16} strokeWidth={1.75} color={notApplied ? colors.textSecondary : colors.primary} />}
+                badge={<Icon size={16} color={notApplied ? colors.textSecondary : colors.primary} />}
                 label={RELIEF_LABELS[deduction.id] ?? deduction.label}
                 value={notApplied ? 'Not applied' : amountKobo === null ? '—' : formatNaira(amountKobo)}
                 note={note}
@@ -656,7 +655,7 @@ function CalculationTab({ calc }: { calc: TaxCalculation | null }) {
         accessibilityRole="button"
         accessibilityHint="Opens an explanation with the full band table"
       >
-        <CircleHelp size={16} strokeWidth={1.75} color={colors.primary} />
+        <CircleHelp size={16} color={colors.primary} />
         <Text style={styles.link}>How tax bands work</Text>
       </Pressable>
       <Text style={styles.rulesNote}>
@@ -808,7 +807,7 @@ function DocumentsTab({
             style={({ pressed }) => [styles.docRow, index > 0 && styles.rowDivider, pressed && styles.pressed]}
           >
             <View style={styles.badge}>
-              <FileText size={17} strokeWidth={1.75} color={colors.primary} />
+              <FileText size={16} color={colors.primary} />
             </View>
             <View style={styles.docText}>
               <Text style={styles.docName} numberOfLines={2}>
@@ -819,8 +818,8 @@ function DocumentsTab({
                 {linked ? ` · ${linked}` : ''}
               </Text>
             </View>
-            {linked ? <CircleCheck size={18} strokeWidth={1.75} color={colors.primary} /> : null}
-            <ChevronRight size={18} strokeWidth={1.75} color={colors.mutedStroke} />
+            {linked ? <CircleCheck size={20} color={colors.primary} /> : null}
+            <ChevronRight size={20} color={colors.mutedStroke} />
           </Pressable>
         );
       })}
@@ -1068,7 +1067,7 @@ const styles = StyleSheet.create({
     width: BADGE,
     height: BADGE,
     borderRadius: BADGE / 2,
-    backgroundColor: colors.greenTint,
+    backgroundColor: colors.heroTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1190,7 +1189,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   bandRowMine: {
-    backgroundColor: colors.greenTint,
+    backgroundColor: colors.heroTint,
     borderRadius: radii.md,
   },
   bandSlice: {
@@ -1270,7 +1269,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   bandsButton: {
-    borderRadius: radii.full,
     marginTop: spacing.lg,
   },
   rulesNote: {
@@ -1336,10 +1334,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     flexShrink: 1,
-  },
-  approveButton: {
-    borderRadius: radii.full,
-    minHeight: 52,
   },
   sheetContent: {
     width: '100%',

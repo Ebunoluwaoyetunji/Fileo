@@ -1,11 +1,13 @@
 /**
  * Bottom tab bar from the Home Figma frame. All 4 tabs are now real
- * destinations.
+ * destinations. Lucide has no filled icons, so the active tab shows a soft
+ * tinted pill behind its icon (and a bold label) instead.
  */
-import { Ionicons } from '@expo/vector-icons';
 import { Href, router } from 'expo-router';
+import { FileText, Folder, House, type LucideIcon, User } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
 
@@ -14,13 +16,12 @@ type TabKey = 'home' | 'file' | 'documents' | 'profile';
 const TABS: {
   key: TabKey;
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  iconActive: keyof typeof Ionicons.glyphMap;
+  icon: LucideIcon;
 }[] = [
-  { key: 'home', label: 'Home', icon: 'home-outline', iconActive: 'home' },
-  { key: 'file', label: 'File', icon: 'document-text-outline', iconActive: 'document-text' },
-  { key: 'documents', label: 'Documents', icon: 'folder-outline', iconActive: 'folder' },
-  { key: 'profile', label: 'Profile', icon: 'person-outline', iconActive: 'person' },
+  { key: 'home', label: 'Home', icon: House },
+  { key: 'file', label: 'File', icon: FileText },
+  { key: 'documents', label: 'Documents', icon: Folder },
+  { key: 'profile', label: 'Profile', icon: User },
 ];
 
 const TAB_ROUTES: Partial<Record<TabKey, Href>> = {
@@ -35,6 +36,9 @@ type BottomTabBarProps = {
 };
 
 export function BottomTabBar({ active }: BottomTabBarProps) {
+  // The bar pads the bottom safe area itself (its screens use edges={['top']}),
+  // so the area under it is always white whatever the screen's background.
+  const insets = useSafeAreaInsets();
   const handlePress = (key: TabKey) => {
     if (key === active) {
       return;
@@ -46,9 +50,10 @@ export function BottomTabBar({ active }: BottomTabBarProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, spacing.xs) }]}>
       {TABS.map((tab) => {
         const isActive = tab.key === active;
+        const Icon = tab.icon;
         return (
           <Pressable
             key={tab.key}
@@ -58,11 +63,9 @@ export function BottomTabBar({ active }: BottomTabBarProps) {
             accessibilityLabel={tab.label}
             accessibilityState={{ selected: isActive }}
           >
-            <Ionicons
-              name={isActive ? tab.iconActive : tab.icon}
-              size={22}
-              color={isActive ? colors.textPrimary : colors.textSecondary}
-            />
+            <View style={[styles.iconPill, isActive && styles.iconPillActive]}>
+              <Icon size={24} color={isActive ? colors.primaryButton : colors.textSecondary} />
+            </View>
             <Text style={[styles.label, isActive && styles.labelActive]}>{tab.label}</Text>
           </Pressable>
         );
@@ -82,7 +85,18 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 2,
+    minHeight: 48,
+  },
+  iconPill: {
+    width: 56,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconPillActive: {
+    backgroundColor: colors.heroTint,
   },
   label: {
     ...typography.caption,

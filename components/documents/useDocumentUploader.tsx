@@ -19,7 +19,7 @@
  * ⚠️ No Figma design for the two sheets, the uploading row or the error
  * row — built from the existing BottomSheet, Button and caption styles.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronRight } from 'lucide-react-native';
 import { ReactNode, useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -210,7 +210,7 @@ export function useDocumentUploader() {
       <BottomSheet visible={sourceRequest !== null} onClose={() => setSourceRequest(null)}>
         <Text style={styles.sheetTitle}>Add a document</Text>
         <Text style={styles.sheetBody}>PDF, JPG, PNG or HEIC, up to 10 MB.</Text>
-        <Button label="Choose a file" variant="dark" onPress={() => choose('files')} />
+        <Button label="Choose a file" variant="primary" onPress={() => choose('files')} />
         <Button
           label="Take a photo"
           variant="secondary"
@@ -219,7 +219,7 @@ export function useDocumentUploader() {
         />
         <Button
           label="Cancel"
-          variant="ghost"
+          variant="secondary"
           onPress={() => setSourceRequest(null)}
           style={styles.sheetButtonSpacing}
         />
@@ -238,7 +238,7 @@ export function useDocumentUploader() {
             accessibilityRole="button"
           >
             <Text style={styles.categoryLabel}>{choice.name}</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            <ChevronRight color={colors.textSecondary} />
           </Pressable>
         ))}
         <Button
@@ -260,12 +260,12 @@ export function useDocumentUploader() {
             accessibilityRole="button"
           >
             <Text style={styles.categoryLabel}>{category.label}</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            <ChevronRight color={colors.textSecondary} />
           </Pressable>
         ))}
         <Button
           label="Cancel"
-          variant="ghost"
+          variant="secondary"
           onPress={() => setCategoryRequest(null)}
           style={styles.sheetButtonSpacing}
         />

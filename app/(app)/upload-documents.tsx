@@ -27,7 +27,7 @@
  * only shows its toast and doesn't mark anything as uploaded, since
  * submitting needs the real documents.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { CircleCheck, Clock, CloudUpload } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
@@ -187,7 +187,7 @@ function UploadDocumentsContent() {
                     <Text style={styles.changeLink}>Change</Text>
                   </Pressable>
                 ) : (
-                  <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                  <CircleCheck size={24} color={colors.success} />
                 )}
               </View>
               {uploadState.status === 'uploading' ? <UploadingRow /> : null}
@@ -198,12 +198,12 @@ function UploadDocumentsContent() {
             </>
           ) : (
             <>
-              <Ionicons name="cloud-upload-outline" size={32} color={colors.textSecondary} />
+              <CloudUpload size={40} color={colors.textSecondary} />
               <Text style={styles.uploadPlatformName}>{platform}</Text>
               <Text style={styles.uploadDescription}>{manualUploadDescription(platform)}</Text>
               <Button
                 label="Upload"
-                variant="dark"
+                variant="primary"
                 onPress={() => handleUpload(platform)}
                 loading={uploadState.status === 'uploading'}
                 style={styles.uploadButton}
@@ -258,7 +258,7 @@ function UploadDocumentsContent() {
                 ) : null}
               </View>
               <View style={styles.comingSoonRow}>
-                <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+                <Clock size={16} color={colors.textSecondary} />
                 <Text style={styles.comingSoonText}>
                   Automatic bank connection is coming soon. For now, upload a statement for each
                   account.

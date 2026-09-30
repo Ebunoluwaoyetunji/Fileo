@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Eye, EyeOff } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { colors } from '../../constants/colors';
@@ -55,11 +55,7 @@ export function TextField({
             accessibilityLabel={isRevealed ? 'Hide password' : 'Show password'}
             hitSlop={8}
           >
-            <Ionicons
-              name={isRevealed ? 'eye-off-outline' : 'eye-outline'}
-              size={20}
-              color={colors.textSecondary}
-            />
+            {isRevealed ? <EyeOff color={colors.textSecondary} /> : <Eye color={colors.textSecondary} />}
           </Pressable>
         ) : null}
       </View>

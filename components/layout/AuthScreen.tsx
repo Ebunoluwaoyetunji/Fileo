@@ -109,7 +109,7 @@ export function AuthScreen({
 
           <View style={styles.fields}>{children}</View>
 
-          <Button label={ctaLabel} variant="dark" loading={ctaLoading} onPress={onSubmitCta} />
+          <Button label={ctaLabel} variant="primary" loading={ctaLoading} onPress={onSubmitCta} />
 
           {bottomLinkLabel ? (
             bottomLinkOnPress ? (

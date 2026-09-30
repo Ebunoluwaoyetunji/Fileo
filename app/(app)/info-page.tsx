@@ -7,7 +7,7 @@
  * ⚠️ All copy here is a placeholder, clearly marked as such on-screen too
  * — real legal/support content to replace it later.
  */
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, Wrench } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
@@ -40,7 +40,7 @@ export default function InfoPageScreen() {
   return (
     <Screen>
       <Pressable onPress={() => router.back()} style={styles.backRow} hitSlop={8}>
-        <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
+        <ChevronLeft color={colors.textPrimary} />
         <Text style={styles.backLabel}>Profile</Text>
       </Pressable>
 
@@ -52,7 +52,7 @@ export default function InfoPageScreen() {
         </Card>
 
         <View style={styles.placeholderNote}>
-          <Ionicons name="construct-outline" size={14} color={colors.textSecondary} />
+          <Wrench size={16} color={colors.textSecondary} />
           <Text style={styles.placeholderNoteText}>
             Placeholder content — will be replaced with the real copy.
           </Text>
