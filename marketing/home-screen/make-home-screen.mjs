@@ -129,7 +129,7 @@ async function captureStates(browser, base) {
     await page.goto(`${base}/home`, { waitUntil: 'load' });
     await splashGone(page);
     await page.getByText(state.waitFor, { exact: true }).waitFor({ timeout: 30000 });
-    await page.waitForTimeout(1500); // the ring's fill sweeps in
+    await page.waitForTimeout(1500); // let data and fonts settle
     shots[state.name] = path.join(work, `${state.name}.png`);
     await page.screenshot({ path: shots[state.name] });
   }

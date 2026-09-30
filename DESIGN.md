@@ -31,11 +31,16 @@ a screen.
 
 ## Type
 
-- **Playfair Display** (`typography.hero`, 40pt bold) is only for hero numbers,
-  such as the tax due on Return Review and Home's estimated tax.
-  `typography.heroTitle` (26pt) is Playfair at title size, only for the next
-  step on Home's filing card. The serif `typography.display` is for screen
-  headlines.
+- **Only one Playfair element per screen.** It is the screen's focal point.
+  Everything else supports it in the system font.
+  - `typography.hero` (Playfair 40pt bold) is for a hero number, such as the
+    tax due on Return Review.
+  - `typography.heroTitle` (Playfair 26pt) is for a title at the same level,
+    such as the next step on Home's filing card.
+  - Don't: a second Playfair number or heading on the same screen. For
+    example, Home's estimated tax is bold body text (32pt), not Playfair.
+- The serif `typography.display` is for onboarding and screen headlines.
+- A greeting is a friendly hello, not a heading: 20pt, medium weight.
 - Everything else uses the system font: `body` 16/22, `bodyStrong` 16/22 semibold,
   `caption` 13/18, `h3` 18/24. Rows use 15pt.
 - Section labels are small uppercase (`typography.overline`: 12pt, semibold,
@@ -85,25 +90,35 @@ a screen.
   history. Section names are small green text, and the result step uses `tone="final"`.
 - **BottomSheet** (`components/ui/BottomSheet`): confirmations and short
   explanations. It has one primary button and a secondary way out.
-- **SegmentedRing** (`components/ui/SegmentedRing`): progress through a
-  fixed number of steps, as a ring split into equal segments with gaps and
-  rounded ends. Props: `total`, `completed`, and children for the centre
-  ("3/5", or a tick when done). Done segments are `primary`, the rest
-  `border`. The fill sweeps in when the count changes, and jumps straight
-  there with Reduce Motion on. Use 84pt with a 7pt stroke, or 64pt with a 6pt
-  stroke on narrow phones and large text.
-  - Do: one ring per card, for steps the user works through.
-  - Don't: use it for amounts or percentages (it counts steps).
+- **SegmentedProgress** (`components/ui/SegmentedProgress`): progress
+  through a fixed number of steps. It shows one short rounded segment per
+  step (24 x 4pt, 4pt gaps). Done segments are `primary`, the rest `border`.
+  - Put short muted text beside it: "3 of 5 steps". Before starting, show
+    the size of the job ("5 steps · about 10 minutes"). When done, use one
+    word ("Submitted", or "Filed" with a 16pt green tick).
+  - On Home's filing card it sits under the title.
+  - Do: use it for steps the user works through.
+  - Don't: use it for amounts or percentages.
+- **SegmentedRing** (`components/ui/SegmentedRing`): the same idea as a
+  ring, with centre content. It's kept for later but isn't used on Home, so
+  it doesn't compete with the title. If it's used, it's one ring per card.
 - **Learn card** (Home's "Helpful to know"): a horizontal, swipeable row of
   200pt white cards, each with a hairline border, a 36pt `heroTint` icon
   circle, a short title (15pt semibold) and one line of `caption`. Let the
   next card peek in so the row reads as swipeable. Each card opens a
   BottomSheet explainer from `components/filing/HelpSheets` with a "Got it"
   button.
-- **Deadline pill**: a round `heroTint` pill with a 16pt icon and
-  `primaryDark` caption text ("Due 31 Mar 2026 · 49 days left"). It turns
-  amber once overdue ("Overdue by 12 days"). Deadlines live in
-  `constants/deadlines.ts`, one date per tax year.
+- **Deadline**: by default a plain muted line (`caption`, `textSecondary`)
+  with a 16pt calendar icon: "Due 31 Mar 2026 · 49 days left".
+  - In the last 14 days, it becomes an amber pill with the same text.
+  - Once past, it's an amber pill: "Overdue by 12 days".
+  - Deadlines live in `constants/deadlines.ts`, one date per tax year.
+- **Home filing card order**: label (green overline) → title → progress with
+  step text → deadline → one primary button. Spacing: 8 below the label,
+  16 above the progress, 8 above the deadline, 24 above the button.
+- **Error cards**: keep them compact, with no Playfair: a 20pt alert icon, a
+  regular-weight 18pt title ("Couldn't load your return"), one line of
+  helper text and a secondary "Try again" button.
 - **List rows with icon circles**: a 36pt `heroTint` circle with a 16 or 20pt
   green icon, the label, and a right-aligned value.
 - **Callouts**: amber for "needs attention", green (`primaryLight`) for

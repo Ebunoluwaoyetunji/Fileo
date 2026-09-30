@@ -3,16 +3,22 @@
  * so far, short explainers, and past years. Top to bottom:
  *
  *  1. Header: initials avatar (opens Profile), the bell, and a greeting.
- *  2. Filing card, on the tinted hero: "2025 TAX RETURN", the next step as
- *     the title, a SegmentedRing (one segment per filing step), the
- *     deadline pill (constants/deadlines.ts) and one button. States:
- *       not started   0/5, "Start your 2025 return", Start filing
- *       in progress   n/5, the next step ("Upload your Upwork statement"),
- *                     Continue (resumes the draft at its saved step)
- *       submitted     ring full, "Your return is being processed", View status
- *       completed     ring full with a tick, "You're done for 2025", View receipt
- *       rejected      ring full in amber, "Your return needs attention"
- *     plus loading and couldn't-load.
+ *  2. Filing card, on the tinted hero, top to bottom: "2025 TAX RETURN",
+ *     the next step as the title (the screen's one Playfair element and its
+ *     focal point), a SegmentedProgress bar with the step count, the
+ *     deadline (constants/deadlines.ts) and one button. States:
+ *       not started   no segments filled, "5 steps · about 10 minutes",
+ *                     "Start your 2025 return", Start filing
+ *       in progress   "3 of 5 steps", the next step ("Upload your Upwork
+ *                     statement"), Continue (resumes the draft at its step)
+ *       submitted     all filled, "Submitted", "Your return is being
+ *                     processed", View status
+ *       completed     all filled, a tick and "Filed", "You're done for
+ *                     2025", View receipt
+ *       rejected      all filled in amber, "Your return needs attention"
+ *     plus loading and a compact couldn't-load card.
+ *     The deadline is a plain muted line, and an amber pill in the last
+ *     DEADLINE_WARNING_DAYS days or once it has passed.
  *  3. Estimated tax: only once the draft has income and a calculation. Taps
  *     through to Return Review.
  *  4. Helpful to know: a swipeable row of explainer cards, each opening a
@@ -39,7 +45,7 @@ import {
 } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { ReactNode, useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
 import { HeroScroll } from '../../components/layout/HeroScroll';
 import { Screen } from '../../components/layout/Screen';
@@ -53,7 +59,7 @@ import {
 } from '../../components/filing/HelpSheets';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
-import { SegmentedRing } from '../../components/ui/SegmentedRing';
+import { SegmentedProgress } from '../../components/ui/SegmentedProgress';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { daysUntil, filingDeadline, formatDeadline, formatDeadlineLong } from '../../constants/deadlines';
@@ -73,6 +79,10 @@ import { useAuth } from '../../state/authContext';
 import { FilingHistoryEntry, useFiling } from '../../state/filingContext';
 
 const TOTAL_STEPS = FILING_STEPS.length;
+/** Roughly how long a whole return takes, for the not-started card. */
+const FILING_ESTIMATE_MINUTES = 10;
+/** From this many days before the deadline, it shows as an amber pill. */
+const DEADLINE_WARNING_DAYS = 14;
 const LEARN_CARD_WIDTH = 200;
 
 type CardState =
@@ -98,10 +108,6 @@ function initials(fullName: string | null | undefined): string {
   }
   const letters = words.length === 1 ? [words[0]] : [words[0], words[words.length - 1]];
   return letters.map((word) => word.charAt(0).toUpperCase()).join('');
-}
-
-function formatShortDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** The draft's next step in plain words, from where it was last saved. */
@@ -222,7 +228,7 @@ export default function HomeScreen() {
           <Bell size={24} />
         </Pressable>
       </View>
-      <Text style={styles.greeting} accessibilityRole="header">
+      <Text style={styles.greeting}>
         {greeting}
       </Text>
 
@@ -388,23 +394,14 @@ function FilingCard({
   onOpenFiling: (entry: FilingHistoryEntry) => void;
   onRetry: () => void;
 }) {
-  // Narrow phones and larger text: a smaller ring and title, so a long word
-  // ("deductions") never has to break beside the ring.
-  const { width, fontScale } = useWindowDimensions();
-  const compact = width < 360 || fontScale > 1.2;
-  const ring = compact ? { size: 64, strokeWidth: 6, gap: 5 } : { size: 84, strokeWidth: 7, gap: 6 };
-  const titleStyle = [styles.cardTitle, compact && styles.cardTitleCompact];
-
   if (card.kind === 'loading') {
     return (
       <View style={styles.card} accessible accessibilityLabel="Loading your return">
-        <View style={styles.cardTop}>
-          <View style={styles.cardText}>
-            <View style={[styles.skeleton, styles.skeletonLabel]} />
-            <View style={[styles.skeleton, styles.skeletonTitle]} />
-            <View style={[styles.skeleton, styles.skeletonTitleShort]} />
-          </View>
-          <SegmentedRing total={TOTAL_STEPS} completed={0} {...ring} />
+        <View style={[styles.skeleton, styles.skeletonLabel]} />
+        <View style={[styles.skeleton, styles.skeletonTitle]} />
+        <View style={[styles.skeleton, styles.skeletonTitleShort]} />
+        <View style={styles.progress}>
+          <SegmentedProgress total={TOTAL_STEPS} completed={0} accessibilityLabel="Loading" />
         </View>
         <View style={[styles.skeleton, styles.skeletonButton]} />
       </View>
@@ -414,13 +411,17 @@ function FilingCard({
   if (card.kind === 'error') {
     return (
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>{currentTaxYear(now)} tax return</Text>
-        <Text style={titleStyle}>Couldn’t load your return</Text>
+        <View style={styles.errorTitleRow}>
+          <CircleAlert size={20} color={colors.danger} />
+          <Text style={styles.errorTitle} accessibilityRole="header">
+            Couldn’t load your return
+          </Text>
+        </View>
         <Text style={[styles.muted, styles.errorBody]} accessibilityLiveRegion="polite">
           {/* The title already says it didn't load; the body says what to do. */}
           {card.message.includes('connection') ? 'Check your connection and try again.' : 'Please try again.'}
         </Text>
-        <Button label="Try again" variant="secondary" onPress={onRetry} loading={retrying} style={styles.cardButton} />
+        <Button label="Try again" variant="secondary" onPress={onRetry} loading={retrying} style={styles.errorButton} />
       </View>
     );
   }
@@ -428,98 +429,78 @@ function FilingCard({
   const year = card.taxYear;
   let title: string;
   let done: number;
-  let centre: ReactNode;
-  let ringColor: string = colors.primary;
+  let progressLabel: string;
+  let progressIcon: ReactNode = null;
+  let progressColor: string = colors.primary;
   let button: { label: string; onPress: () => void; loading?: boolean };
   switch (card.kind) {
     case 'notStarted':
       title = `Start your ${year} return`;
       done = 0;
+      progressLabel = `${TOTAL_STEPS} steps · about ${FILING_ESTIMATE_MINUTES} minutes`;
       button = { label: 'Start filing', onPress: onStart, loading: isStarting };
       break;
     case 'inProgress':
       title = card.title;
       done = card.done;
+      progressLabel = `${done} of ${TOTAL_STEPS} steps`;
       button = { label: 'Continue', onPress: onStart, loading: isStarting };
       break;
     case 'submitted':
       title = 'Your return is being processed';
       done = TOTAL_STEPS;
+      progressLabel = 'Submitted';
       button = { label: 'View status', onPress: () => onOpenFiling(card.entry) };
       break;
     case 'completed':
       title = `You’re done for ${year}`;
       done = TOTAL_STEPS;
-      centre = <Check size={compact ? 24 : 32} color={colors.primary} />;
+      progressLabel = 'Filed';
+      progressIcon = <Check size={16} color={colors.primary} />;
       button = { label: 'View receipt', onPress: () => onOpenFiling(card.entry) };
       break;
     case 'rejected':
     default:
       title = 'Your return needs attention';
       done = TOTAL_STEPS;
-      ringColor = colors.amberText;
-      centre = <CircleAlert size={compact ? 24 : 28} color={colors.amberText} />;
+      progressLabel = 'Needs attention';
+      progressColor = colors.amberText;
       button = { label: 'View status', onPress: () => onOpenFiling(card.entry) };
       break;
   }
-  if (centre === undefined) {
-    centre = (
-      <Text style={styles.ringText} maxFontSizeMultiplier={1.3}>
-        {done}/{TOTAL_STEPS}
-      </Text>
-    );
-  }
 
-  // Before submitting: the deadline. After: when it was submitted.
-  let pill: { text: string; tone: 'neutral' | 'amber' | 'done' } | null = null;
-  if (card.kind === 'notStarted' || card.kind === 'inProgress') {
-    if (deadline) {
-      const days = daysUntil(deadline, now);
-      pill =
-        days < 0
-          ? { text: `Overdue by ${-days} ${-days === 1 ? 'day' : 'days'}`, tone: 'amber' }
-          : {
-              text: `Due ${formatDeadline(deadline)} · ${days === 0 ? 'today' : `${days} ${days === 1 ? 'day' : 'days'} left`}`,
-              tone: 'neutral',
-            };
-    }
-  } else {
-    pill = { text: `Submitted ${formatShortDate(card.entry.submittedAt)}`, tone: 'done' };
+  // Only before submitting. Calm by default; amber when it's close or past.
+  let due: { text: string; urgent: boolean } | null = null;
+  if (deadline && (card.kind === 'notStarted' || card.kind === 'inProgress')) {
+    const days = daysUntil(deadline, now);
+    due =
+      days < 0
+        ? { text: `Overdue by ${-days} ${-days === 1 ? 'day' : 'days'}`, urgent: true }
+        : {
+            text: `Due ${formatDeadline(deadline)} · ${days === 0 ? 'today' : `${days} ${days === 1 ? 'day' : 'days'} left`}`,
+            urgent: days < DEADLINE_WARNING_DAYS,
+          };
   }
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={styles.cardText}>
-          <Text style={styles.cardLabel}>{year} tax return</Text>
-          <Text style={titleStyle} accessibilityRole="header">
-            {title}
-          </Text>
-        </View>
-        <SegmentedRing
+      <Text style={styles.cardLabel}>{year} tax return</Text>
+      <Text style={styles.cardTitle} accessibilityRole="header">
+        {title}
+      </Text>
+      <View style={styles.progress}>
+        <SegmentedProgress
           total={TOTAL_STEPS}
           completed={done}
-          {...ring}
-          fillColor={ringColor}
-          accessibilityLabel={`${done} of ${TOTAL_STEPS} steps done`}
-        >
-          {centre}
-        </SegmentedRing>
+          label={progressLabel}
+          labelIcon={progressIcon}
+          fillColor={progressColor}
+        />
       </View>
-      {pill ? (
-        <View
-          style={[
-            styles.pill,
-            pill.tone === 'amber' && styles.pillAmber,
-            pill.tone === 'done' && styles.pillDone,
-          ]}
-        >
-          {pill.tone === 'done' ? (
-            <Check size={16} color={colors.primaryDark} />
-          ) : (
-            <CalendarClock size={16} color={pill.tone === 'amber' ? colors.amberText : colors.primaryDark} />
-          )}
-          <Text style={[styles.pillText, pill.tone === 'amber' && styles.pillTextAmber]}>{pill.text}</Text>
+      {due ? (
+        <View style={[styles.due, due.urgent && styles.duePill]}>
+          <CalendarClock size={16} color={due.urgent ? colors.amberText : colors.textSecondary} />
+          <Text style={[styles.dueText, due.urgent && styles.dueTextUrgent]}>{due.text}</Text>
         </View>
       ) : null}
       <Button
@@ -576,28 +557,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: -spacing.sm,
   },
+  // A friendly hello, not a heading: the filing card's title is the focus.
   greeting: {
-    ...typography.h2,
-    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '500',
     color: colors.textPrimary,
     marginBottom: spacing.lg,
   },
 
-  // Filing card
+  // Filing card: label → title → progress → deadline → button.
   card: {
     backgroundColor: colors.background,
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     padding: spacing.lg,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  cardText: {
-    flex: 1,
   },
   cardLabel: {
     ...typography.overline,
@@ -608,50 +583,54 @@ const styles = StyleSheet.create({
     ...typography.heroTitle,
     color: colors.textPrimary,
   },
-  cardTitleCompact: {
-    fontSize: 22,
-    lineHeight: 28,
+  progress: {
+    marginTop: spacing.md,
   },
-  ringText: {
-    ...typography.bodyStrong,
-    ...tabularNumbers,
-    color: colors.textPrimary,
-  },
-  pill: {
+  due: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    backgroundColor: colors.heroTint,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: 6,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     maxWidth: '100%',
   },
-  pillAmber: {
+  duePill: {
     backgroundColor: colors.amberTint,
     borderWidth: 1,
     borderColor: colors.amberBorder,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs,
   },
-  pillDone: {
-    backgroundColor: colors.successTint,
-  },
-  pillText: {
+  dueText: {
     ...typography.caption,
     ...tabularNumbers,
-    fontWeight: '600',
-    color: colors.primaryDark,
+    color: colors.textSecondary,
     flexShrink: 1,
   },
-  pillTextAmber: {
+  dueTextUrgent: {
+    fontWeight: '600',
     color: colors.amberText,
   },
   cardButton: {
     marginTop: spacing.lg,
   },
+  errorTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  errorTitle: {
+    ...typography.h3,
+    fontWeight: '400',
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
   errorBody: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  errorButton: {
+    marginTop: spacing.md,
   },
   skeleton: {
     backgroundColor: colors.surface,
@@ -663,12 +642,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   skeletonTitle: {
-    width: '90%',
+    width: '85%',
     height: 24,
     marginBottom: spacing.sm,
   },
   skeletonTitleShort: {
-    width: '60%',
+    width: '55%',
     height: 24,
   },
   skeletonButton: {
@@ -705,11 +684,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
+  // Body font, bold: Playfair is kept for the filing card's title alone.
   snapshotAmount: {
-    ...typography.hero,
+    fontSize: 32,
+    lineHeight: 40,
+    fontWeight: '700',
     ...tabularNumbers,
     color: colors.textPrimary,
   },
+
   stats: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
