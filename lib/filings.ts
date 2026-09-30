@@ -599,11 +599,22 @@ export function describeMissingItem(item: MissingItem): MissingItemDetails {
 
 export type ReliefRule = { allowed: boolean; reason?: string; note?: string };
 
+/** One band from a year's rules: its start, width (null: everything above)
+ * and rate in basis points. */
+export type BandRate = { fromKobo: number; widthKobo: number | null; rateBp: number };
+
 /** Which deductions a tax year allows (the server's rules table), e.g. rent
- * relief only from 2026. Null if it couldn't be loaded. */
+ * relief only from 2026, its tax bands, and whether the automatic
+ * consolidated relief allowance applies. Null if it couldn't be loaded. */
 export async function getTaxRules(
   taxYear: number
-): Promise<{ version: string; name: string; reliefs: Record<string, ReliefRule> } | null> {
+): Promise<{
+  version: string;
+  name: string;
+  reliefs: Record<string, ReliefRule>;
+  bands: BandRate[];
+  hasConsolidatedRelief: boolean;
+} | null> {
   const { data, error } = await supabase
     .from('tax_rule_sets')
     .select('version, name, params, tax_year_from, tax_year_to')
@@ -612,9 +623,29 @@ export async function getTaxRules(
   if (error || !data) {
     return null;
   }
-  const rules = (data as { version: string; name: string; params: { reliefs?: Record<string, ReliefRule> }; tax_year_to: number | null }[])
+  type Params = {
+    reliefs?: Record<string, ReliefRule>;
+    bands?: { width_kobo: number | null; rate_bp: number }[];
+    cra?: unknown;
+  };
+  const rules = (data as { version: string; name: string; params: Params; tax_year_to: number | null }[])
     .find((r) => r.tax_year_to === null || r.tax_year_to >= taxYear);
-  return rules ? { version: rules.version, name: rules.name, reliefs: rules.params.reliefs ?? {} } : null;
+  if (!rules) {
+    return null;
+  }
+  let fromKobo = 0;
+  const bands = (rules.params.bands ?? []).map((band) => {
+    const row = { fromKobo, widthKobo: band.width_kobo, rateBp: band.rate_bp };
+    fromKobo += band.width_kobo ?? 0;
+    return row;
+  });
+  return {
+    version: rules.version,
+    name: rules.name,
+    reliefs: rules.params.reliefs ?? {},
+    bands,
+    hasConsolidatedRelief: !!rules.params.cra,
+  };
 }
 
 /** Deductions the tax rules actually applied (excluding the automatic

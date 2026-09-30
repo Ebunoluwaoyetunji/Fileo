@@ -9,8 +9,8 @@ a screen.
 
 | Token | Hex | Use it for |
 |---|---|---|
-| `primaryButton` | `#0B1628` | Every primary button, the "+" button, the active tab icon. White text on it (18:1). |
-| `backgroundInverse` | `#0B1628` | Navy surfaces: splash, the Home status card. Same navy as `primaryButton`. |
+| `primaryButton` | `#0B1628` | Every primary button and the active tab icon. White text on it (18:1). |
+| `backgroundInverse` | `#0B1628` | Navy surfaces such as the splash. Same navy as `primaryButton`. |
 | `primary` | `#0B6E4F` | Accent green: success, savings, positive amounts, ticks, links, selected chips, switches. Not a button colour. |
 | `primaryDark` | `#074D37` | Green text that must read small (tax due, totals). |
 | `primaryLight` | `#E3F3EC` | Green chips and callouts ("Deductions saved you…", "What's next?"). |
@@ -32,8 +32,10 @@ a screen.
 ## Type
 
 - **Playfair Display** (`typography.hero`, 40pt bold) is only for hero numbers,
-  such as the tax due on Return Review. The serif `typography.display` is for
-  screen headlines.
+  such as the tax due on Return Review and Home's estimated tax.
+  `typography.heroTitle` (26pt) is Playfair at title size, only for the next
+  step on Home's filing card. The serif `typography.display` is for screen
+  headlines.
 - Everything else uses the system font: `body` 16/22, `bodyStrong` 16/22 semibold,
   `caption` 13/18, `h3` 18/24. Rows use 15pt.
 - Section labels are small uppercase (`typography.overline`: 12pt, semibold,
@@ -83,6 +85,25 @@ a screen.
   history. Section names are small green text, and the result step uses `tone="final"`.
 - **BottomSheet** (`components/ui/BottomSheet`): confirmations and short
   explanations. It has one primary button and a secondary way out.
+- **SegmentedRing** (`components/ui/SegmentedRing`): progress through a
+  fixed number of steps, as a ring split into equal segments with gaps and
+  rounded ends. Props: `total`, `completed`, and children for the centre
+  ("3/5", or a tick when done). Done segments are `primary`, the rest
+  `border`. The fill sweeps in when the count changes, and jumps straight
+  there with Reduce Motion on. Use 84pt with a 7pt stroke, or 64pt with a 6pt
+  stroke on narrow phones and large text.
+  - Do: one ring per card, for steps the user works through.
+  - Don't: use it for amounts or percentages (it counts steps).
+- **Learn card** (Home's "Helpful to know"): a horizontal, swipeable row of
+  200pt white cards, each with a hairline border, a 36pt `heroTint` icon
+  circle, a short title (15pt semibold) and one line of `caption`. Let the
+  next card peek in so the row reads as swipeable. Each card opens a
+  BottomSheet explainer from `components/filing/HelpSheets` with a "Got it"
+  button.
+- **Deadline pill**: a round `heroTint` pill with a 16pt icon and
+  `primaryDark` caption text ("Due 31 Mar 2026 · 49 days left"). It turns
+  amber once overdue ("Overdue by 12 days"). Deadlines live in
+  `constants/deadlines.ts`, one date per tax year.
 - **List rows with icon circles**: a 36pt `heroTint` circle with a 16 or 20pt
   green icon, the label, and a right-aligned value.
 - **Callouts**: amber for "needs attention", green (`primaryLight`) for

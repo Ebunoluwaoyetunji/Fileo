@@ -38,6 +38,8 @@ export const typography = {
   },
   /** Playfair Display Bold (bundled, see app/_layout.tsx): hero numbers only. */
   hero: { fontSize: 40, lineHeight: 50, fontFamily: 'PlayfairDisplay-Bold' },
+  /** Playfair at a title size: the next step on Home's filing card. */
+  heroTitle: { fontSize: 26, lineHeight: 32, fontFamily: 'PlayfairDisplay-Bold' },
   /** Small uppercase section label, e.g. "INCOME SOURCES". */
   overline: {
     fontSize: 12,
