@@ -3,12 +3,12 @@
 // statements, Return Review and submit. No music, voice or captions.
 //
 // Outputs (in this folder):
-//   fileo-first-time-framed.mp4  1080x1920, 60fps: the phone on the calm
-//                                brand background (../shared/brand-frame.mjs),
-//                                clear of TikTok's buttons (right 15%) and
-//                                captions (bottom 20%)
-//   fileo-first-time-screen.mp4  1080x1920, 60fps: the app screen only (with a
-//                                painted status bar), to place yourself
+//   fileo-first-time-framed.mp4  1080x1920, 60fps: the app in the shared phone
+//                                frame (../shared/brand-frame.mjs) on the flat
+//                                brand background, clear of TikTok's buttons
+//                                (right 15%) and captions (bottom 20%)
+//   fileo-first-time-screen.mp4  1178x2556, 60fps: the phone screen only (with
+//                                a painted status bar), to place yourself
 //   fileo-short-cut.mp4          the highlights, framed, about 15-20 seconds
 //   timestamps.md                when each screen appears in each video
 //
@@ -40,7 +40,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { brandedFrameHtml, fontFaces, STATUS_ICONS } from '../shared/brand-frame.mjs';
+import { APP_SCALE, APP_VIEWPORT, brandedFrameHtml, fontFaces, PHONE, statusBarHtml } from '../shared/brand-frame.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -62,14 +62,19 @@ const USER = {
 };
 /** Typing speed: frames per character (plus a little variation). */
 const TYPE_FRAMES = 3;
-/** The phone screen in app points: 9:16, with a painted status bar on top. */
-const SCREEN = { width: 414, height: 736, statusBar: 40 };
+/** The framed video. The app is recorded at a real phone's size (393x852pt
+ * at 3x, from ../shared/brand-frame.mjs) and shown in the shared phone frame. */
 const OUT = { width: 1080, height: 1920 };
-/** Where the phone sits in the framed video. TikTok covers the right ~15%
- * (buttons) and bottom ~20% (caption): the phone stays above y=1536 and
- * left of x=918. */
-const PHONE_BOX = { top: 176, height: 1290, centerX: 540 };
-const BRAND_OPTIONS = { screen: SCREEN, phoneBox: PHONE_BOX, monogramCorner: 'bottom-left' };
+/** Where the phone sits: big, centred, 100px from the top. TikTok covers the
+ * right ~15% (buttons) and bottom ~20% (caption): at 1420px tall the whole
+ * phone ends above y=1536 and right of centre stays left of x=918. */
+const PHONE_BOX = { top: 100, height: 1420 };
+/** No wordmark (TikTok's captions cover the bottom) and no "O": the phone
+ * fills the frame, so the flat background reads best. */
+const BRAND_OPTIONS = { phoneBox: PHONE_BOX, wordmark: 'none', monogram: false };
+/** The screen-only video: the whole phone screen at 3x (status bar painted,
+ * no frame), 1178x2556 (H.264 needs even sizes; 1px of the 1179 trimmed). */
+const RAW = { width: 1178, height: Math.round(PHONE.height * APP_SCALE) };
 /** The highlights for the short cut: [from marker, to marker or +seconds, speed]. */
 const SHORT_CUT = [
   { from: 'Splash', to: 'Onboarding 1', speed: 1.15 },
@@ -88,9 +93,10 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'fileo-tiktok-'));
 const ffmpeg = process.env.FFMPEG || 'ffmpeg';
 const MAILBOX = process.env.DEMO_MAILBOX_URL || 'http://127.0.0.1:54324';
 const frameMs = 1000 / FPS;
-const APP_VIEWPORT = { width: SCREEN.width, height: SCREEN.height - SCREEN.statusBar };
-const APP_SCALE = OUT.width / SCREEN.width;
-const BAR_PX = Math.round(SCREEN.statusBar * APP_SCALE);
+const BAR_PX = Math.round(PHONE.statusBar * APP_SCALE);
+/** The compositor page: the raw screen on the left, the framed video at RAW_SLOT. */
+const RAW_SLOT = 1180;
+const PAGE = { width: RAW_SLOT + OUT.width, height: RAW.height };
 const log = (...args) => console.log('[tiktok-demo]', ...args);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -198,27 +204,22 @@ function deleteDemoUser() {
 // ─── Compositing: framed and raw, one screenshot per frame ───────────────────
 function compositorHtml() {
   const framed = brandedFrameHtml({ width: OUT.width, height: OUT.height, phones: [{ src: '' }], options: BRAND_OPTIONS });
-  const k = APP_SCALE;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
   ${fontFaces()}
-  html,body{margin:0;width:${OUT.width * 2}px;height:${OUT.height}px;overflow:hidden;background:#fff}
-  #raw{position:absolute;left:0;top:0;width:${OUT.width}px;height:${OUT.height}px;overflow:hidden;background:#fff}
-  #rawbar{position:absolute;left:0;top:0;right:0;height:${BAR_PX}px;display:flex;align-items:center;justify-content:space-between;
-    padding:${Math.round(2 * k)}px ${Math.round(24 * k)}px 0 ${Math.round(30 * k)}px;box-sizing:border-box;font-family:Inter,Arial,sans-serif}
-  #rawbar .time{font-size:${Math.round(15 * k)}px;font-weight:600}
-  #rawbar .icons{display:flex;align-items:center;gap:${Math.round(6 * k)}px;font-size:${Math.round(14 * k)}px}
-  #rawbar svg{display:block}
-  #rawimg{position:absolute;left:0;top:${BAR_PX}px;width:${OUT.width}px;height:${OUT.height - BAR_PX}px}
-  iframe{position:absolute;left:${OUT.width}px;top:0;width:${OUT.width}px;height:${OUT.height}px;border:0}
+  html,body{margin:0;width:${PAGE.width}px;height:${PAGE.height}px;overflow:hidden;background:#fff}
+  #raw{position:absolute;left:0;top:0;width:${Math.round(PHONE.width * APP_SCALE)}px;height:${RAW.height}px;overflow:hidden;background:#fff}
+  .sb-icons{display:flex;align-items:center;gap:0.32em}.sb-icons svg{display:block}
+  #rawimg{position:absolute;left:0;top:${BAR_PX}px;width:100%;height:${RAW.height - BAR_PX}px}
+  iframe{position:absolute;left:${RAW_SLOT}px;top:0;width:${OUT.width}px;height:${OUT.height}px;border:0}
   </style></head><body>
-  <div id="raw"><div id="rawbar"><span class="time">9:41</span>${STATUS_ICONS}</div><img id="rawimg"></div>
+  <div id="raw">${statusBarHtml({ id: 'rawbar', k: APP_SCALE })}<img id="rawimg"></div>
   <iframe id="framed" srcdoc="${framed.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>
   </body></html>`;
 }
 
 async function openCompositor(browser) {
   fs.writeFileSync(path.join(work, 'compositor.html'), compositorHtml());
-  const page = await browser.newPage({ viewport: { width: OUT.width * 2, height: OUT.height }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: PAGE, deviceScaleFactor: 1 });
   return page;
 }
 
@@ -249,11 +250,11 @@ function startEncoder() {
   const args = [
     '-y', '-loglevel', 'error',
     '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
-    '-filter_complex', `[0:v]split=2[a][b];[a]crop=${OUT.width}:${OUT.height}:${OUT.width}:0[framed];[b]crop=${OUT.width}:${OUT.height}:0:0[raw]`,
+    '-filter_complex', `[0:v]split=2[a][b];[a]crop=${OUT.width}:${OUT.height}:${RAW_SLOT}:0[framed];[b]crop=${RAW.width}:${RAW.height}:0:0[raw]`,
   ];
   const encode = (label, file) => [
     '-map', `[${label}]`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '22', '-pix_fmt', 'yuv420p',
-    '-profile:v', 'high', '-level', '4.2', '-r', String(FPS), '-movflags', '+faststart', file,
+    '-profile:v', 'high', '-level', label === 'raw' ? '5.1' : '4.2', '-r', String(FPS), '-movflags', '+faststart', file,
   ];
   const proc = spawn(ffmpeg, [...args, ...encode('framed', path.join(here, 'fileo-first-time-framed.mp4')), ...encode('raw', path.join(here, 'fileo-first-time-screen.mp4'))], { stdio: ['pipe', 'inherit', 'inherit'] });
   const done = new Promise((resolve, reject) => proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)))));
