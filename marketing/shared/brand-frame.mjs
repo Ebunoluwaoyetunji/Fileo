@@ -238,7 +238,7 @@ function pageHtml({ width, height, phones, o }) {
   body{background:${o.background};position:relative;font-family:Inter,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased}
   .monogram{position:absolute;${oPos};width:${oW}px;height:${oH}px;opacity:${o.monogramOpacity}}
   .layout{position:absolute;inset:0;display:grid;grid-template-columns:repeat(${phones.length},${colW}px);
-    grid-template-rows:${Math.round(height * 0.06)}px ${hasCaptions ? 'auto' : '0px'} ${hasCaptions ? Math.round(height * 0.035) : 0}px ${m.height}px 1fr ${bottomWordmark ? wmH : 0}px ${Math.round(height * 0.045)}px}
+    grid-template-rows:${hasCaptions ? `${Math.round(height * 0.06)}px auto ${Math.round(height * 0.035)}px` : '1fr 0px 0px'} ${m.height}px 1fr ${bottomWordmark ? wmH : 0}px ${Math.round(height * 0.045)}px}
   .caption{grid-row:2;align-self:end;justify-self:center;max-width:${Math.min(colW - Math.round(80 * unit), Math.round(m.width * 1.9))}px;text-align:center;
     color:${o.captionColor};font-size:${Math.round(o.captionSize * unit)}px;line-height:1.25;font-weight:${o.captionWeight};letter-spacing:-0.01em;text-wrap:balance}
   .phonecell{grid-row:4;justify-self:center}

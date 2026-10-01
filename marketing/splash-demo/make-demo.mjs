@@ -1,7 +1,7 @@
 // Renders the animated-splash demo videos for social posts (no screen
 // recording): the web build is driven frame by frame with Playwright's clock,
-// each frame is composited into a phone frame, and ffmpeg assembles them at
-// 60fps.
+// each frame goes into the shared phone frame on the calm brand background
+// (../shared/brand-frame.mjs), and ffmpeg assembles them at 60fps.
 //
 // Outputs (in this folder):
 //   fileo-splash-4x5.mp4   1080x1350, H.264 / yuv420p, 60fps (LinkedIn feed)
@@ -26,6 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { APP_SCALE, APP_VIEWPORT, brandedFrameHtml, paintStatusBars } from '../shared/brand-frame.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -43,22 +44,11 @@ const NEXT_SCREEN_ROUTE = '/step-1'; // signed-out onboarding, no personal data
 const GIF_WIDTH = 720;
 const GIF_FPS = 30;
 
-const COLORS = {
-  navy: '#0B1628',
-  green: '#0B6E4F',
-  backgroundTop: '#F4F5F2',
-  backgroundBottom: '#E4E9E7',
-  phone: '#121821',
-};
-
-// Phone size per format (outer height in px); the screen keeps the app's
-// 390x844 proportions.
+// The phone's height as a share of each format's height (the shared frame).
 const FORMATS = [
-  { name: '4x5', width: 1080, height: 1350, phoneHeight: 1150 },
-  { name: '1x1', width: 1080, height: 1080, phoneHeight: 930 },
+  { name: '4x5', width: 1080, height: 1350, phoneHeightRatio: 0.8 },
+  { name: '1x1', width: 1080, height: 1080, phoneHeightRatio: 0.8 },
 ];
-const APP_VIEWPORT = { width: 390, height: 844 };
-const APP_SCALE = 3; // capture at 3x so the phone screen stays crisp
 // ──────────────────────────────────────────────────────────────────────────────
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -189,32 +179,16 @@ function buildTimeline(real, slow) {
 
 // ─── 4. Composite into the phone frame ───────────────────────────────────────
 function demoHtml(format) {
-  const screenH = format.phoneHeight - 2 * bezel(format);
-  const screenW = Math.round((screenH * APP_VIEWPORT.width) / APP_VIEWPORT.height);
-  const b = bezel(format);
-  const phoneW = screenW + 2 * b;
-  const radius = Math.round(format.phoneHeight * 0.075);
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-  html,body{margin:0;width:${format.width}px;height:${format.height}px;overflow:hidden}
-  body{background:radial-gradient(ellipse 60% 55% at 50% 48%, rgba(11,110,79,0.07), rgba(11,110,79,0) 70%),
-       linear-gradient(170deg, ${COLORS.backgroundTop} 0%, ${COLORS.backgroundBottom} 100%);
-       display:flex;align-items:center;justify-content:center;
-       font-family:'Inter','Helvetica Neue','Segoe UI',Arial,'Liberation Sans',sans-serif}
-  .phone{position:relative;width:${phoneW}px;height:${format.phoneHeight}px;border-radius:${radius}px;background:${COLORS.phone};
-       box-shadow:0 ${Math.round(format.phoneHeight * 0.04)}px ${Math.round(format.phoneHeight * 0.08)}px rgba(11,22,40,0.20),0 6px 18px rgba(11,22,40,0.12),inset 0 0 0 1.5px rgba(255,255,255,0.10)}
-  .screen{position:absolute;left:${b}px;top:${b}px;width:${screenW}px;height:${screenH}px;border-radius:${radius - b}px;overflow:hidden;background:${COLORS.navy}}
-  .screen img{position:absolute;inset:0;width:100%;height:100%}
-  .camera{position:absolute;left:50%;top:${Math.round(b + screenH * 0.018)}px;width:${Math.round(screenW * 0.035)}px;height:${Math.round(screenW * 0.035)}px;margin-left:-${Math.round(screenW * 0.0175)}px;border-radius:50%;background:#05080D;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.06)}
-  .label{position:absolute;top:${Math.round(format.height * 0.045)}px;right:${Math.round(format.width * 0.05)}px;padding:8px 18px;border-radius:999px;
-       font-size:28px;font-weight:600;letter-spacing:0.5px;color:rgba(11,22,40,0.62);border:1.5px solid rgba(11,22,40,0.14);background:rgba(255,255,255,0.45);opacity:0}
-  </style></head><body>
-  <div class="phone"><div class="screen"><img id="a"><img id="b" style="opacity:0"></div><div class="camera"></div></div>
-  <div class="label" id="label">0.5x</div>
-  </body></html>`;
-}
-
-function bezel(format) {
-  return Math.round(format.phoneHeight * 0.0125);
+  const page = brandedFrameHtml({
+    width: format.width,
+    height: format.height,
+    phones: [{ src: '' }],
+    options: { phoneHeightRatio: format.phoneHeightRatio },
+  });
+  // The "0.5x" label, top right.
+  const label = `<div id="label" style="position:absolute;top:${Math.round(format.height * 0.045)}px;right:${Math.round(format.width * 0.05)}px;padding:8px 18px;border-radius:999px;
+    font-size:28px;font-weight:600;letter-spacing:0.5px;color:rgba(11,22,40,0.62);border:1.5px solid rgba(11,22,40,0.14);background:rgba(255,255,255,0.45);opacity:0">0.5x</div>`;
+  return page.replace('</body>', `${label}</body>`);
 }
 
 async function renderFormat(browser, base, format, timeline) {
@@ -223,6 +197,16 @@ async function renderFormat(browser, base, format, timeline) {
   fs.writeFileSync(path.join(work, `demo-${format.name}.html`), demoHtml(format));
   const page = await browser.newPage({ viewport: { width: format.width, height: format.height }, deviceScaleFactor: 1 });
   await page.goto(`${base}/__work/demo-${format.name}.html`);
+  await page.evaluate(() => document.fonts.ready);
+  // A second screen image on top of the first, for crossfades.
+  await page.evaluate(() => {
+    const a = document.getElementById('img0');
+    const b = a.cloneNode();
+    b.id = 'img0b';
+    b.removeAttribute('src');
+    b.style.opacity = '0';
+    a.after(b);
+  });
   const src = (file) => (file ? `${base}/__work/${path.relative(work, file).split(path.sep).join('/')}` : '');
   let previous = null;
   let previousFile = null;
@@ -242,13 +226,14 @@ async function renderFormat(browser, base, format, timeline) {
             if (url) await img.decode();
           }
         };
-        await load(document.getElementById('a'), a);
-        await load(document.getElementById('b'), b);
-        document.getElementById('b').style.opacity = String(b ? mix : 0);
+        await load(document.getElementById('img0'), a);
+        await load(document.getElementById('img0b'), b);
+        document.getElementById('img0b').style.opacity = String(b ? mix : 0);
         document.getElementById('label').style.opacity = String(label);
       },
       { a: src(f.a), b: src(f.b), mix: f.mix, label: f.label }
     );
+    await paintStatusBars(page, 1);
     await page.screenshot({ path: out });
     previous = key;
     previousFile = out;

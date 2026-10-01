@@ -1,13 +1,16 @@
 // Renders the Return Review screen for social posts (no screen recording):
 // the real, signed-in web build is driven frame by frame with Playwright's
-// clock, each frame is composited into a clean phone frame (like the splash
-// demo), and ffmpeg assembles the video at 60fps.
+// clock, each frame goes into the shared phone frame on the calm brand
+// background (../shared/brand-frame.mjs), and ffmpeg assembles the video at
+// 60fps.
 //
 // Outputs (in this folder), all 1080x1350:
 //   review-summary.png      Summary tab
 //   review-calculation.png  Calculation tab (the timeline)
 //   review-tax-bands.png    the "How tax bands work" sheet
 //   review-documents.png    Documents tab
+//   review-before-after.png the old screen next to the new Summary tab (if
+//                           before-source.png is here)
 //   review-tabs.mp4         H.264 / yuv420p, 60fps: Summary → Calculation
 //                           (scrolls through the working) → Documents → Summary
 //
@@ -28,6 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { APP_SCALE, APP_VIEWPORT, brandedFrameHtml, paintStatusBars, renderBrandedImage } from '../shared/brand-frame.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -54,10 +58,9 @@ const SCRIPT = [
 const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@example.com';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPass-2026'; // a throwaway local account
 
-const FORMAT = { width: 1080, height: 1350, phoneHeight: 1150 };
-const COLORS = { backgroundTop: '#F4F5F2', backgroundBottom: '#E4E9E7', phone: '#121821' };
-const APP_VIEWPORT = { width: 390, height: 844 };
-const APP_SCALE = 3;
+const FORMAT = { width: 1080, height: 1350 };
+// Any BRAND_DEFAULTS key from ../shared/brand-frame.mjs.
+const BRAND_OPTIONS = {};
 // ──────────────────────────────────────────────────────────────────────────────
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -250,40 +253,20 @@ async function captureVideo(browser, base) {
 }
 
 // ─── Phone frame ─────────────────────────────────────────────────────────────
-function phoneHtml() {
-  const f = FORMAT;
-  const b = Math.round(f.phoneHeight * 0.0125);
-  const screenH = f.phoneHeight - 2 * b;
-  const screenW = Math.round((screenH * APP_VIEWPORT.width) / APP_VIEWPORT.height);
-  const radius = Math.round(f.phoneHeight * 0.075);
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-  html,body{margin:0;width:${f.width}px;height:${f.height}px;overflow:hidden}
-  body{background:radial-gradient(ellipse 60% 55% at 50% 48%, rgba(11,110,79,0.07), rgba(11,110,79,0) 70%),
-       linear-gradient(170deg, ${COLORS.backgroundTop} 0%, ${COLORS.backgroundBottom} 100%);
-       display:flex;align-items:center;justify-content:center}
-  .phone{position:relative;width:${screenW + 2 * b}px;height:${f.phoneHeight}px;border-radius:${radius}px;background:${COLORS.phone};
-       box-shadow:0 ${Math.round(f.phoneHeight * 0.04)}px ${Math.round(f.phoneHeight * 0.08)}px rgba(11,22,40,0.20),0 6px 18px rgba(11,22,40,0.12),inset 0 0 0 1.5px rgba(255,255,255,0.10)}
-  .screen{position:absolute;left:${b}px;top:${b}px;width:${screenW}px;height:${screenH}px;border-radius:${radius - b}px;overflow:hidden;background:#fff}
-  .screen img{position:absolute;inset:0;width:100%;height:100%}
-  .camera{position:absolute;left:50%;top:${Math.round(b + screenH * 0.018)}px;width:${Math.round(screenW * 0.035)}px;height:${Math.round(screenW * 0.035)}px;margin-left:-${Math.round(screenW * 0.0175)}px;border-radius:50%;background:#05080D;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.06)}
-  </style></head><body>
-  <div class="phone"><div class="screen"><img id="a"></div><div class="camera"></div></div>
-  </body></html>`;
-}
-
+/** Puts each app frame into the shared phone frame (../shared/brand-frame.mjs). */
 async function composite(browser, base, inputs, outDir) {
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(work, 'phone.html'), phoneHtml());
+  fs.writeFileSync(path.join(work, 'phone.html'), brandedFrameHtml({ ...FORMAT, phones: [{ src: '' }], options: BRAND_OPTIONS }));
   const page = await browser.newPage({ viewport: { width: FORMAT.width, height: FORMAT.height }, deviceScaleFactor: 1 });
   await page.goto(`${base}/__work/phone.html`);
+  await page.evaluate(() => document.fonts.ready);
   const outputs = [];
   for (let i = 0; i < inputs.length; i++) {
     const url = `${base}/__work/${path.relative(work, inputs[i]).split(path.sep).join('/')}`;
-    await page.evaluate(async (u) => {
-      const img = document.getElementById('a');
-      img.setAttribute('src', u);
-      await img.decode();
+    await page.evaluate((u) => {
+      document.getElementById('img0').setAttribute('src', u);
     }, url);
+    await paintStatusBars(page, 1);
     const out = path.join(outDir, `${String(i).padStart(4, '0')}.png`);
     await page.screenshot({ path: out });
     outputs.push(out);
@@ -305,6 +288,20 @@ async function main() {
     const framed = await composite(browser, base, names.map((n) => shots[n]), path.join(work, 'stills'));
     names.forEach((n, i) => fs.copyFileSync(framed[i], path.join(here, `review-${n}.png`)));
     log(`wrote ${names.map((n) => `review-${n}.png`).join(', ')}`);
+    // The old Return Review next to the new one (before-source.png: the old
+    // screen at the same size, captured from the commit before the redesign).
+    if (fs.existsSync(path.join(here, 'before-source.png'))) {
+      await renderBrandedImage(browser, {
+        ...FORMAT,
+        phones: [
+          { image: path.join(here, 'before-source.png'), caption: 'Before' },
+          { image: shots.summary, caption: 'After' },
+        ],
+        out: path.join(here, 'review-before-after.png'),
+        options: { ...BRAND_OPTIONS, phoneHeightRatio: 0.66 },
+      });
+      log('wrote review-before-after.png');
+    }
 
     log('video frames …');
     const frames = await captureVideo(browser, base);

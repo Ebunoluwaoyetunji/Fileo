@@ -1,7 +1,8 @@
 # Home screen: LinkedIn exports
 
-`make-home-screen.mjs` renders the redesigned Home screen in the same clean
-phone frame as the Return Review and splash exports. Every image is 1080x1350:
+`make-home-screen.mjs` renders the redesigned Home screen in the shared
+phone frame on the calm brand background (`../shared/brand-frame.mjs`), like
+every export. Every image is 1080x1350:
 
 - `home-in-progress.png`: 3 of 5 steps done, with the estimated tax, the
   "Helpful to know" row and a filed 2024 return
