@@ -55,6 +55,14 @@ export const BRAND_DEFAULTS = {
   /** Paint a status bar (time, signal, wifi, battery) above each screenshot. */
   statusBar: true,
   statusBarTime: '9:41',
+  /** The phone's screen in app points (default PHONE). A 9:16 screen, e.g.
+   * { width: 414, height: 736, statusBar: 40 }, suits vertical video. */
+  screen: null,
+  /** Place one phone exactly instead of the default centred layout:
+   * { top, height, centerX? } in px. The wordmark then sits wordmarkGap px
+   * below it. Used to keep clear of TikTok's buttons and captions. */
+  phoneBox: null,
+  wordmarkGap: 28,
 };
 
 // ─── Assets ──────────────────────────────────────────────────────────────────
@@ -77,7 +85,8 @@ function letterO(paths) {
 // The O's box in the wordmark's 141x35 viewBox.
 const O_BOX = { x: 104.6, y: 0, w: 36.3, h: 35 };
 
-function fontFaces() {
+/** @font-face rules for the bundled Inter (captions, status bar). */
+export function fontFaces() {
   const dir = path.join(here, 'fonts');
   const face = (file, weight) =>
     fs.existsSync(path.join(dir, file))
@@ -87,7 +96,8 @@ function fontFaces() {
 }
 
 // ─── Markup ──────────────────────────────────────────────────────────────────
-const STATUS_ICONS = `<span class="icons">
+/** Signal, wifi and battery icons for a painted status bar (size them with font-size). */
+export const STATUS_ICONS = `<span class="icons">
   <svg width="1.1em" height="0.72em" viewBox="0 0 18 12"><g fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></g></svg>
   <svg width="1em" height="0.72em" viewBox="0 0 16 12"><path fill="currentColor" d="M8 2.2c2.4 0 4.6.9 6.3 2.5l1.2-1.3A10.9 10.9 0 0 0 8 .4 10.9 10.9 0 0 0 .5 3.4l1.2 1.3A9.1 9.1 0 0 1 8 2.2Zm0 3.5c1.5 0 2.9.6 3.9 1.5l1.2-1.3A7.4 7.4 0 0 0 8 3.9a7.4 7.4 0 0 0-5.1 2l1.2 1.3c1-.9 2.4-1.5 3.9-1.5Zm0 3.4c.6 0 1.2.2 1.6.6L8 11.6 6.4 9.7c.4-.4 1-.6 1.6-.6Z"/></svg>
   <svg width="1.6em" height="0.8em" viewBox="0 0 26 13"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" stroke-opacity="0.4"/><rect x="2" y="2" width="19" height="9" rx="2.2" fill="currentColor"/><path d="M24 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2Z" fill="currentColor" fill-opacity="0.45"/></svg>
@@ -95,14 +105,15 @@ const STATUS_ICONS = `<span class="icons">
 
 function pageHtml({ width, height, phones, o }) {
   const unit = Math.min(width, height) / 1080; // px per "px at 1080"
-  const phoneH = Math.round(height * o.phoneHeightRatio);
+  const screen = o.screen ?? PHONE;
+  const phoneH = Math.round(o.phoneBox ? o.phoneBox.height : height * o.phoneHeightRatio);
   const bezel = Math.round(phoneH * 0.0125);
   const screenH = phoneH - 2 * bezel;
-  const screenW = Math.round((screenH * PHONE.width) / PHONE.height);
+  const screenW = Math.round((screenH * screen.width) / screen.height);
   const phoneW = screenW + 2 * bezel;
   const radius = Math.round(phoneH * 0.075);
-  const k = screenW / PHONE.width; // app points -> px
-  const barH = Math.round(PHONE.statusBar * k);
+  const k = screenW / screen.width; // app points -> px
+  const barH = Math.round(screen.statusBar * k);
 
   const paths = wordmarkPaths();
   const oSize = Math.round(Math.min(width, height) * o.monogramScale);
@@ -149,13 +160,27 @@ function pageHtml({ width, height, phones, o }) {
   .camera{position:absolute;left:50%;top:${Math.round(bezel + screenH * 0.018)}px;width:${Math.round(screenW * 0.035)}px;height:${Math.round(screenW * 0.035)}px;
     margin-left:-${Math.round(screenW * 0.0175)}px;border-radius:50%;background:#05080D}
   .wordmark{grid-row:6;grid-column:1 / -1;justify-self:center;width:${wmW}px;height:${wmH}px;opacity:${o.wordmarkOpacity}}
+  .placed{position:absolute;left:${Math.round((o.phoneBox?.centerX ?? width / 2) - phoneW / 2)}px;top:${o.phoneBox?.top ?? 0}px}
+  .placed-wordmark{position:absolute;left:${Math.round((o.phoneBox?.centerX ?? width / 2) - wmW / 2)}px;top:${(o.phoneBox?.top ?? 0) + phoneH + o.wordmarkGap}px;width:${wmW}px;height:${wmH}px;opacity:${o.wordmarkOpacity}}
   </style></head><body>
   <svg class="monogram" viewBox="${O_BOX.x} ${O_BOX.y} ${O_BOX.w} ${O_BOX.h}" preserveAspectRatio="xMidYMid meet"><path d="${letterO(paths)}" fill="${o.ink}"/></svg>
+  ${o.phoneBox ? `
+  <div class="placed">${phoneMarkup(phones[0], 0)}</div>
+  ${o.wordmarkWidth ? `<svg class="placed-wordmark" viewBox="0 0 141 35">${paths.map((d) => `<path d="${d}" fill="${o.ink}"/>`).join('')}</svg>` : ''}` : `
   <div class="layout">
     ${phones.map((p, i) => `${p.caption ? `<div class="caption" style="grid-column:${i + 1}">${escapeHtml(p.caption)}</div>` : ''}<div class="phonecell" style="grid-column:${i + 1}">${phoneMarkup(p, i)}</div>`).join('')}
     ${o.wordmarkWidth ? `<svg class="wordmark" viewBox="0 0 141 35">${paths.map((d) => `<path d="${d}" fill="${o.ink}"/>`).join('')}</svg>` : ''}
-  </div>
+  </div>`}
   </body></html>`;
+}
+
+/**
+ * The frame as an HTML page, for callers that update it themselves (e.g. a
+ * video that swaps the screenshot in `#img0` every frame). `phones[].src`
+ * is an image URL; the status bars are `#bar0`, `#bar1`, ….
+ */
+export function brandedFrameHtml({ width, height, phones, options = {} }) {
+  return pageHtml({ width, height, phones, o: { ...BRAND_DEFAULTS, ...options } });
 }
 
 /**

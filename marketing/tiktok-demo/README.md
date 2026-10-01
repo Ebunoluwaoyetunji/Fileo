@@ -1,0 +1,1 @@
+Re-render the first-time-user TikTok videos and `timestamps.md` with `node marketing/tiktok-demo/make-demo.mjs` against a local Supabase with the mock identity and AI providers and a mail catcher (see the comments at the top of the script for the environment variables).
