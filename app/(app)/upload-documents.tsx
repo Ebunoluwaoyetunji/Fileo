@@ -49,6 +49,7 @@ import {
 } from '../../components/documents/useDocumentUploader';
 import { FilingProgressBar } from '../../components/ui/FilingProgressBar';
 import { PlatformIcon } from '../../components/ui/PlatformIcon';
+import { TestingNotice } from '../../components/ui/TestingNotice';
 import { Toast } from '../../components/ui/Toast';
 import { colors } from '../../constants/colors';
 import { isNigerianBank, platformDocumentCategory } from '../../constants/platforms';
@@ -282,6 +283,7 @@ function UploadDocumentsContent() {
             </>
           ) : null}
         </View>
+        <TestingNotice />
       </ScrollView>
 
       <Button

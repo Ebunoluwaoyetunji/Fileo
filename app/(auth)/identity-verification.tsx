@@ -25,6 +25,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AuthScreen } from '../../components/layout/AuthScreen';
+import { TestingNotice } from '../../components/ui/TestingNotice';
 import { TextField } from '../../components/ui/TextField';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
@@ -142,6 +143,7 @@ export default function IdentityVerificationScreen() {
       ctaLabel="Continue"
       onSubmitCta={handleContinue}
       ctaLoading={isVerifying}
+      footer={<TestingNotice />}
     >
       <TextField
         label="NIN Number"

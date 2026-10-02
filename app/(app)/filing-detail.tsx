@@ -6,7 +6,7 @@
  * server show up.
  *
  * No design frame for this exists yet — built to fit the app's existing
- * patterns: the back row matches document-detail.tsx / info-page.tsx, the
+ * patterns: the back row matches document-detail.tsx / LongFormPage.tsx, the
  * status timeline reuses the checkmark/ellipse step style from
  * filing-history.tsx's in-progress checklist, and the income/deductions
  * breakdown reuses return-review.tsx's detail-row styling.

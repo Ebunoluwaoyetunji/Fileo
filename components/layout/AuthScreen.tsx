@@ -7,7 +7,8 @@
  * for a plain dark one), a body subtitle, the form fields, a full-width
  * dark CTA, and a bottom link row. The bottom link is either real
  * navigation (`bottomLinkHref`) or a mock local action (`bottomLinkOnPress`,
- * e.g. "Resend code") — pass exactly one.
+ * e.g. "Resend code") — pass exactly one. An optional `footer` sits just
+ * under the CTA (e.g. Create Account's terms line).
  */
 import { Href, Link } from 'expo-router';
 import React, { ReactNode } from 'react';
@@ -54,6 +55,8 @@ type AuthScreenProps = {
   bottomLinkOnPress?: () => void;
   /** Mutes the link and ignores taps — e.g. OTP's "Resend in 30s" cooldown. Only meaningful with `bottomLinkOnPress`. */
   bottomLinkDisabled?: boolean;
+  /** Small print right under the CTA, e.g. the terms line or the early-testing note. */
+  footer?: ReactNode;
 };
 
 export function AuthScreen({
@@ -72,6 +75,7 @@ export function AuthScreen({
   bottomLinkHref,
   bottomLinkOnPress,
   bottomLinkDisabled = false,
+  footer,
 }: AuthScreenProps) {
   const bottomLinkContent = bottomLinkLabel ? (
     <Text style={styles.bottomText}>
@@ -110,6 +114,8 @@ export function AuthScreen({
           <View style={styles.fields}>{children}</View>
 
           <Button label={ctaLabel} variant="primary" loading={ctaLoading} onPress={onSubmitCta} />
+
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
 
           {bottomLinkLabel ? (
             bottomLinkOnPress ? (
@@ -164,6 +170,10 @@ const styles = StyleSheet.create({
   },
   fields: {
     marginBottom: spacing.md,
+  },
+  footer: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   bottomLink: {
     alignSelf: 'center',

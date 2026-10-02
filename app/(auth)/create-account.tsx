@@ -9,12 +9,20 @@
  * success Supabase emails a 6-digit code and this moves on to OTP
  * Verification. full_name/phone go in as signup metadata, which the
  * on_auth_user_created trigger copies into the user's profiles row.
+ *
+ * Under the button: the Terms of Use / Privacy Policy line (both open the
+ * public info pages) and the early-testing note (components/ui/TestingNotice).
  */
-import { router } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet, Text } from 'react-native';
 import { AuthScreen } from '../../components/layout/AuthScreen';
+import { TestingNotice } from '../../components/ui/TestingNotice';
 import { TextField } from '../../components/ui/TextField';
 import { Toast } from '../../components/ui/Toast';
+import { colors } from '../../constants/colors';
+import { typography } from '../../constants/theme';
+import { infoPageHref } from '../../content/legal';
 import { useAuth } from '../../state/authContext';
 
 // Supabase error codes that are about the email itself vs. the password,
@@ -114,6 +122,22 @@ export default function CreateAccountScreen() {
         bottomText="Already have an account?"
         bottomLinkLabel="Login"
         bottomLinkHref="/(auth)/sign-in"
+        footer={
+          <>
+            <Text style={styles.terms}>
+              By creating an account, you agree to our{' '}
+              <Link href={infoPageHref('terms')} style={styles.termsLink}>
+                Terms of Use
+              </Link>{' '}
+              and{' '}
+              <Link href={infoPageHref('privacy')} style={styles.termsLink}>
+                Privacy Policy
+              </Link>
+              .
+            </Text>
+            <TestingNotice />
+          </>
+        }
       >
         <TextField
           label="Full name"
@@ -165,3 +189,15 @@ export default function CreateAccountScreen() {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  terms: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  termsLink: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+});

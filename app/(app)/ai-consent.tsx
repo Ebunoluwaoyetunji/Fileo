@@ -4,20 +4,22 @@
  * sent, to whom, why, that the user always confirms the numbers, and that
  * they can type their income instead. "Allow" or "Enter manually"; either
  * choice is saved on their profile (set_ai_consent) and can be changed in
- * Profile at any time.
+ * Profile at any time. A link under the points opens the full "How Fileo
+ * uses AI" page (content/legal/ai.ts).
  *
  * ⚠️ No Figma design for this screen — built from the existing Screen,
  * Card, Button and text styles.
  */
-import { Building2, CircleCheck, FileText, type LucideIcon, Sparkles, SquarePen } from 'lucide-react-native';
+import { Building2, ChevronRight, CircleCheck, FileText, type LucideIcon, Sparkles, SquarePen } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../components/layout/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { colors } from '../../constants/colors';
 import { spacing, typography } from '../../constants/theme';
+import { infoPageHref } from '../../content/legal';
 import { setAiConsent } from '../../lib/extractions';
 import { useAuth } from '../../state/authContext';
 
@@ -93,6 +95,15 @@ export default function AiConsentScreen() {
             </View>
           ))}
         </Card>
+        <Pressable
+          onPress={() => router.push(infoPageHref('ai'))}
+          style={({ pressed }) => [styles.moreLink, pressed && styles.pressed]}
+          accessibilityRole="link"
+          hitSlop={4}
+        >
+          <Text style={styles.moreLinkText}>How Fileo uses AI</Text>
+          <ChevronRight size={16} color={colors.primary} />
+        </Pressable>
       </ScrollView>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button label="Allow" onPress={() => choose(true)} loading={saving === 'allow'} />
@@ -143,6 +154,21 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: spacing.xs / 2,
+  },
+  moreLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    minHeight: 44,
+    marginTop: spacing.sm,
+  },
+  moreLinkText: {
+    ...typography.bodyStrong,
+    color: colors.primary,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   error: {
     ...typography.caption,

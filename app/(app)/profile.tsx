@@ -24,12 +24,13 @@
  *  - Change Password is real (AuthContext.changePassword): checks the
  *    current password, saves the new one, and Supabase signs out every
  *    other session while this one stays signed in.
- *  - Legal/Support items open shared placeholder content (info-page.tsx).
+ *  - Legal/Support items open the info pages (app/info/[page].tsx, copy in
+ *    content/legal). "Send feedback" opens FEEDBACK_URL (constants/app.ts).
  */
-import { AlarmClock, Bell, ChevronRight, CircleCheck, CircleHelp, FileText, Fingerprint, Flag, Grid3x3, Lock, Mail, MessageCircleMore, Shield, ShieldCheck, Smartphone, Sparkles, User, type LucideIcon } from 'lucide-react-native';
+import { AlarmClock, Bell, ChevronRight, CircleCheck, CircleHelp, FileText, Fingerprint, Grid3x3, Info, Lock, Mail, MessageSquareHeart, Scale, Shield, ShieldCheck, Smartphone, Sparkles, User, type LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { BottomTabBar } from '../../components/layout/BottomTabBar';
 import { HeroScroll } from '../../components/layout/HeroScroll';
 import { Screen } from '../../components/layout/Screen';
@@ -38,8 +39,10 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextField } from '../../components/ui/TextField';
 import { Toast } from '../../components/ui/Toast';
+import { FEEDBACK_URL } from '../../constants/app';
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
+import { InfoPageSlug, infoPageHref } from '../../content/legal';
 import { useAuth } from '../../state/authContext';
 import { setAiConsent } from '../../lib/extractions';
 import { useFiling } from '../../state/filingContext';
@@ -172,8 +175,7 @@ export default function ProfileScreen() {
   const initials = getInitials(fullName);
 
   const goToPersonalInfo = () => router.push('/(app)/edit-profile');
-  const goToInfoPage = (topic: string, title: string) =>
-    router.push({ pathname: '/(app)/info-page', params: { topic, title } });
+  const goToInfoPage = (slug: InfoPageSlug) => router.push(infoPageHref(slug));
 
   const handleChangePassword = async () => {
     if (isChangingPassword) {
@@ -378,20 +380,13 @@ export default function ProfileScreen() {
 
         <SectionTitle>Legal</SectionTitle>
         <Card style={styles.sectionCard}>
+          <Row icon={FileText} label="Privacy Policy" onPress={() => goToInfoPage('privacy')} />
+          <Row icon={FileText} label="Terms of Use" onPress={() => goToInfoPage('terms')} />
+          <Row icon={Sparkles} label="How Fileo uses AI" onPress={() => goToInfoPage('ai')} />
           <Row
-            icon={FileText}
-            label="Privacy Policy"
-            onPress={() => goToInfoPage('privacy', 'Privacy Policy')}
-          />
-          <Row
-            icon={FileText}
-            label="Terms of Service"
-            onPress={() => goToInfoPage('terms', 'Terms of Service')}
-          />
-          <Row
-            icon={FileText}
-            label="How We Use Your Data"
-            onPress={() => goToInfoPage('data-use', 'How We Use Your Data')}
+            icon={Scale}
+            label="Tax disclaimer"
+            onPress={() => goToInfoPage('tax-disclaimer')}
             isLast
           />
         </Card>
@@ -399,17 +394,12 @@ export default function ProfileScreen() {
         <SectionTitle>Support</SectionTitle>
         <Card style={styles.sectionCard}>
           <Row
-            icon={MessageCircleMore}
-            label="Contact Us"
-            onPress={() => goToInfoPage('contact', 'Contact Us')}
+            icon={MessageSquareHeart}
+            label="Send feedback"
+            onPress={() => Linking.openURL(FEEDBACK_URL)}
           />
-          <Row icon={CircleHelp} label="FAQ" onPress={() => goToInfoPage('faq', 'FAQ')} />
-          <Row
-            icon={Flag}
-            label="Report a Problem"
-            onPress={() => goToInfoPage('report', 'Report a Problem')}
-            isLast
-          />
+          <Row icon={CircleHelp} label="Help and FAQ" onPress={() => goToInfoPage('faq')} />
+          <Row icon={Info} label="About Fileo" onPress={() => goToInfoPage('about')} isLast />
         </Card>
 
         {/* Signing out deletes nothing, so it's the secondary style with red
