@@ -5,7 +5,7 @@
 
 /** Where "Send feedback" goes (Profile, About, the info pages). A form or
  * page you control. No support email is shown anywhere. */
-export const FEEDBACK_URL = 'https://forms.gle/REPLACE-WITH-YOUR-FEEDBACK-FORM';
+export const FEEDBACK_URL = 'https://forms.gle/xGncS9GTaLUWrgFz9';
 
 /** The designer's portfolio, linked from About. */
 export const PORTFOLIO_URL = 'https://ebunoluwaoyetunji.github.io';
