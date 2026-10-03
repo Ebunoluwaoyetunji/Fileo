@@ -1,0 +1,15 @@
+Fileo promo: audio licence
+
+The music ("Lagos") and all sound design in the Fileo promo videos are
+original work, composed and synthesised in code by compose-audio.py in this
+folder. No samples, loops, stock music or third-party recordings are used:
+every sound (drums, marimba, log drums, pads, chimes, alarm, ticks, whooshes)
+is generated from sine waves, filtered noise and simple synthesis.
+
+Created for Fileo by Ebunoluwa Oyetunji (with Claude Code), 2026.
+Owner: Ebunoluwa Oyetunji. You may use, edit and publish the audio and the
+videos commercially, on any platform, without attribution.
+
+Fonts in the video: Playfair Display and Inter, both under the SIL Open Font
+License 1.1 (see ../shared/fonts/OFL.txt and
+../../assets/fonts/PlayfairDisplay-OFL.txt).

@@ -1,0 +1,81 @@
+{
+  "title": "Fileo: Money from everywhere",
+  "duration": 34.5,
+  "fps": 60,
+  "bpm": 120,
+  "music": "Lagos: an original Afro-pop score composed in compose-audio.py (see LICENSE-audio.txt)",
+  "formats": {
+    "9x16": { "width": 1080, "height": 1920, "scale": 0.84, "centerY": 900, "note": "TikTok/Reels/Shorts: key content clear of the bottom 20% and right 15%" },
+    "4x5": { "width": 1080, "height": 1350, "scale": 0.8, "centerY": 675 },
+    "1x1": { "width": 1080, "height": 1080, "scale": 0.62, "centerY": 540 }
+  },
+  "text": {
+    "moneyFrom": ["Money from", "everywhere."],
+    "taxSeason": "Then tax season.",
+    "question": ["So what do", "you", "owe?"],
+    "upload": "Upload.",
+    "reads": "Fileo reads it.",
+    "statementRead": "Statement read",
+    "totalIncome": "Total income",
+    "seeWhatYouOwe": "See what you owe.",
+    "andWhy": ["And", "why", "."],
+    "taxableIncome": "Your taxable income: ₦3,655,200",
+    "bandSentence": ["Only the part above ₦3,200,000 is taxed at", "24%", "."],
+    "bandMarker": "₦3,200,000",
+    "average": "On average, you pay 12.3%.",
+    "yourTax": "Your tax for 2025",
+    "saved": "Deductions saved you ₦115,392",
+    "tagline": "Tax filing for Nigerian freelancers.",
+    "earlyTesting": "Now in early testing."
+  },
+  "notifications": [
+    { "at": 0.15, "app": "Paystack", "mark": "P", "color": "#0B6E4F", "title": "Payment received", "body": "You received ₦85,000" },
+    { "at": 0.75, "app": "Upwork", "mark": "U", "color": "#0B1628", "title": "Payment released", "body": "$320 from your client" },
+    { "at": 1.35, "app": "GTBank", "mark": "GT", "color": "#074D37", "title": "Credit alert", "body": "₦150,000 from A. Bello" },
+    { "at": 1.95, "app": "GTBank", "mark": "GT", "color": "#074D37", "title": "Credit alert", "body": "₦12,500 refund" }
+  ],
+  "alert": {
+    "at": 3.45,
+    "label": "URGENT · REMINDERS",
+    "title": "Tax return due",
+    "due": "Due 31 March 2026",
+    "countdownStartSeconds": 224525,
+    "countdownSpeed": 137,
+    "color": "#D93025"
+  },
+  "statement": {
+    "bank": "Guaranty Trust Bank",
+    "mark": "GU",
+    "period": "Statement · 1 Jan – 31 Dec 2025",
+    "rows": [
+      { "date": "03 Feb", "description": "Transfer from A. Bello", "amount": "₦150,000", "kind": "income", "tag": "Income" },
+      { "date": "11 Mar", "description": "Paystack settlement", "amount": "₦85,000", "kind": "counted", "tag": "Already counted" },
+      { "date": "02 Apr", "description": "Transfer from my savings", "amount": "₦50,000", "kind": "not", "tag": "Not income" },
+      { "date": "19 May", "description": "Refund", "amount": "₦12,500", "kind": "not", "tag": "Not income" },
+      { "date": "07 Jul", "description": "Transfer from K. Okafor", "amount": "₦45,000", "kind": "income", "tag": "Income" },
+      { "date": "22 Aug", "description": "Reversal", "amount": "₦7,800", "kind": "not", "tag": "Not income" }
+    ]
+  },
+  "statements": [
+    { "mark": "PA", "name": "Paystack", "amount": "₦3,200,000" },
+    { "mark": "UP", "name": "Upwork", "amount": "₦1,850,000" },
+    { "mark": "GU", "name": "Guaranty Trust Bank", "amount": "₦720,000" }
+  ],
+  "figures": {
+    "totalIncome": 5770000,
+    "taxableIncome": 3655200,
+    "taxDue": 669248,
+    "bands": [[300000, 7], [300000, 11], [500000, 15], [500000, 19], [1600000, 21], [455200, 24]],
+    "topBandFrom": 3200000
+  },
+  "timings": {
+    "moneyFrom": 0.55, "group": 2.7, "season": 2.95, "seasonOut": [4.45, 4.65], "question": 4.7, "questionOut": [5.9, 6.15],
+    "alertTextOut": [5.8, 6.0], "gather": [5.95, 6.65],
+    "splash": 7.4, "drop": 10.5,
+    "glides": { "doc": [12.0, 12.6], "total": [14.0, 14.6], "home": [16.0, 16.6], "why": [18.0, 18.5], "rows": [19.0, 19.5], "bands": [22.5, 23.0], "number": [26.0, 26.5], "close": [30.0, 30.5] },
+    "upload": 10.9, "cardLand": 11.6, "docTitle": 12.4, "roll": [12.75, 13.65], "readCard": 13.8,
+    "docs": 14.35, "totalLand": 15.65, "ringLand": 16.85, "whyTitle": 18.3, "whyDot": 18.75, "rowsScroll": [19.6, 22.1],
+    "bandsLabel": 22.9, "barRoll": [23.15, 23.95], "marker": 24.05, "sentence": 24.35, "average": 25.15,
+    "number": 26.55, "numberLand": 27.35, "pill": 28.1, "closeLand": 30.85, "tagline": 31.5, "sub": 32.1, "end": 34.5
+  }
+}
