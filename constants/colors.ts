@@ -40,8 +40,12 @@ export const colors = {
   primaryOnDark: '#5FC79B',
   /** Secondary text on navy: white at 70% (9.2:1). */
   textOnDarkMuted: 'rgba(255, 255, 255, 0.7)',
-  /** Faint marks on navy (ring track, skeletons): white at 15%. */
+  /** Faint marks on navy (ring track, skeletons, connector lines): white at 15%. */
   faintOnDark: 'rgba(255, 255, 255, 0.15)',
+  /** Soft fill for small shapes on navy (onboarding step circles): white at 8%. */
+  surfaceOnDark: 'rgba(255, 255, 255, 0.08)',
+  /** Hairline borders on navy: white at 12%. */
+  hairlineOnDark: 'rgba(255, 255, 255, 0.12)',
 
   // Flat tints (no gradients) for layered, shadow-free surfaces.
   offWhite: '#FAFAF8',

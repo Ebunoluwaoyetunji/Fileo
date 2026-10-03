@@ -13,7 +13,9 @@ a screen.
 | `backgroundInverse` | `#0B1628` | Navy surfaces: the splash and Home's filing card. Same navy as `primaryButton`. |
 | `primaryOnDark` | `#5FC79B` | Green on navy (labels, ring segments). `primary` is only 2.9:1 on navy; this is 8.7:1. |
 | `textOnDarkMuted` | white at 70% | Secondary text and icons on navy (9.2:1). |
-| `faintOnDark` | white at 15% | Faint marks on navy: empty ring segments and skeletons. |
+| `faintOnDark` | white at 15% | Faint marks on navy: empty ring segments, skeletons and connector lines. |
+| `surfaceOnDark` | white at 8% | Soft fill for small shapes on navy (onboarding step circles). |
+| `hairlineOnDark` | white at 12% | Hairline borders on navy. |
 | `primary` | `#0B6E4F` | Accent green: success, savings, positive amounts, ticks, links, selected chips, switches. Not a button colour. |
 | `primaryDark` | `#074D37` | Green text that must read small (tax due, totals). |
 | `primaryLight` | `#E3F3EC` | Green chips and callouts ("Deductions saved you…", "What's next?"). |
@@ -93,6 +95,17 @@ a screen.
   screen, with 2 to 4 short labels. It is not for navigation.
 - **Timeline** (`components/ui/Timeline`): a step-by-step working or a status
   history. Section names are small green text, and the result step uses `tone="final"`.
+- **OnboardingSteps** (`components/ui/OnboardingSteps`): Timeline's idea drawn
+  for navy, as a short list of steps with no values (onboarding screen 2).
+  - Each row has a Lucide icon in a 44pt circle (`primaryOnDark` icon,
+    `surfaceOnDark` fill, 1pt `hairlineOnDark` border), a white medium-weight
+    title, and a second line in caption `textOnDarkMuted`.
+  - Thin `faintOnDark` connectors run between the circles, not through them.
+  - The list is left-aligned with the headline. Keep it to four rows or fewer.
+  - Motion: rows fade and rise 120ms apart, each connector draws downward as
+    its row arrives, and the last icon gets a brief soft highlight. It uses
+    opacity and transforms only, on the native driver. With reduce motion,
+    the rows fade in together.
 - **BottomSheet** (`components/ui/BottomSheet`): confirmations and short
   explanations. It has one primary button and a secondary way out.
 - **SegmentedRing** (`components/ui/SegmentedRing`): progress through a

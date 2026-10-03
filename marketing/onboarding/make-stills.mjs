@@ -31,7 +31,7 @@ const { chromium } = require('playwright');
 // Captions: each screen's own headline, shortened.
 const STEPS = [
   { route: '/step-1', heading: 'File Your Taxes Without the Stress', caption: 'File your taxes without the stress' },
-  { route: '/step-2', heading: 'File in Four Simple Steps', caption: 'File in four simple steps' },
+  { route: '/step-2', heading: 'Your return, step by step', caption: 'Your return, step by step' },
   { route: '/step-3', heading: 'Your Data Is Safe', caption: 'Your data is safe' },
 ];
 const SINGLE = { width: 1080, height: 1350 };
