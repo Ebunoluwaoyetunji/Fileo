@@ -486,7 +486,7 @@ async function journey(r, files) {
   r.mark('Onboarding 1');
   await r.hold(1.7);
   await r.swipeLeft();
-  await r.until(r.visible(text('File in Four Simple Steps')), { show: 0.3 });
+  await r.until(r.visible(text('File in Five Simple Steps')), { show: 0.3 });
   r.mark('Onboarding 2');
   await r.hold(1.6);
   await r.swipeLeft();

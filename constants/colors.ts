@@ -57,9 +57,14 @@ export const colors = {
   amberBorder: '#EEDDB9',
   amberText: '#7A5310',
 
-  // Onboarding hero gradients (steps 1 and 3 fade down into `background`).
-  forestDeep: '#2C5A48',
+  /** Warm gold for small highlights (Home's attention ring). */
   goldSoft: '#F0CB8E',
+
+  /** Onboarding hero: brand navy (`backgroundInverse`) easing to this, then into the sheet. */
+  heroNavyEnd: '#17294A',
+  /** Onboarding ring on navy (white at 30%), and a light outline for dark shapes on a dark hero. */
+  ringOnDark: 'rgba(255, 255, 255, 0.3)',
+  outlineOnDark: 'rgba(255, 255, 255, 0.35)',
 
   // Onboarding illustration badges: an icon colour with the pale tint in the
   // badge's centre. Indigo is the tax-form badge on step 1; navy, green and

@@ -11,7 +11,7 @@
 //   import { renderBrandedImage } from '../shared/brand-frame.mjs';
 //   await renderBrandedImage(browser, {
 //     width: 1080, height: 1350,
-//     phones: [{ image: 'shot.png', caption: 'File in four simple steps' }],
+//     phones: [{ image: 'shot.png', caption: 'File in five simple steps' }],
 //     out: 'marketing/x/still.png',
 //     options: { monogramCorner: 'top-left' }, // any BRAND_DEFAULTS key
 //   });

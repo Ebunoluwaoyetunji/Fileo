@@ -1,8 +1,11 @@
 /**
  * Shared layout for the onboarding carousel (Figma nodes 88:663, 93:942,
- * 90:921): a colored hero panel (heading, body, illustration) over a white
- * footer (progress dots + CTA), reused by all three onboarding steps so the
- * structure lives in one place instead of being copy-pasted per screen.
+ * 90:921): a navy hero (heading, body, illustration) over a white footer
+ * (progress dots + CTA), reused by all three onboarding steps. Each
+ * illustration sinks into white at its foot (IllustrationCanvas), and the
+ * white runs on into the footer. The
+ * hero colour, text colours and active dot live here, not per screen, so the
+ * three screens always match.
  *
  * Navigation: auto-advances after a delay, is swipeable left/right, and the
  * CTA button always jumps straight to account creation (matching the
@@ -20,18 +23,12 @@ import { Button } from '../ui/Button';
 import { GradientBackground } from '../ui/GradientBackground';
 import { ProgressDots } from '../ui/ProgressDots';
 
-type HeroBackground = { colors: [string] | [string, string] };
-
 type OnboardingScreenProps = {
   step: number;
   totalSteps?: number;
   heading: string;
   body: string;
   illustration: ReactNode;
-  background: HeroBackground;
-  headingColor: string;
-  bodyColor: string;
-  activeDotColor: string;
   /** Route for the next step; omit on the last step to finish onboarding. */
   nextRoute?: Href;
   /** Route for the previous step; omit on the first step. */
@@ -44,10 +41,6 @@ export function OnboardingScreen({
   heading,
   body,
   illustration,
-  background,
-  headingColor,
-  bodyColor,
-  activeDotColor,
   nextRoute,
   prevRoute,
 }: OnboardingScreenProps) {
@@ -101,17 +94,17 @@ export function OnboardingScreen({
     <View style={styles.gestureRoot} {...panResponder.panHandlers}>
       <Screen edges={['top', 'bottom']} style={styles.screen}>
         <GradientBackground
-          colors={background.colors}
+          colors={[colors.backgroundInverse, colors.heroNavyEnd]}
           style={styles.hero}
           contentStyle={styles.heroContent}
         >
-          <Text style={[styles.heading, { color: headingColor }]}>{heading}</Text>
-          <Text style={[styles.body, { color: bodyColor }]}>{body}</Text>
+          <Text style={styles.heading}>{heading}</Text>
+          <Text style={styles.body}>{body}</Text>
           <View style={styles.illustration}>{illustration}</View>
         </GradientBackground>
 
         <View style={styles.footer}>
-          <ProgressDots total={totalSteps} current={step} activeColor={activeDotColor} />
+          <ProgressDots total={totalSteps} current={step} activeColor={colors.primary} />
           <Button
             label="Create Account"
             variant="primary"
@@ -141,10 +134,12 @@ const styles = StyleSheet.create({
   },
   heading: {
     ...typography.display,
+    color: colors.textInverse,
   },
   body: {
     ...typography.body,
     marginTop: spacing.md,
+    color: colors.textInverse,
   },
   illustration: {
     flex: 1,
