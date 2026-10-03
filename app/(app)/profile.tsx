@@ -402,11 +402,11 @@ export default function ProfileScreen() {
           <Row icon={Info} label="About Fileo" onPress={() => goToInfoPage('about')} isLast />
         </Card>
 
-        {/* Signing out deletes nothing, so it's the secondary style with red
-            text; only the final confirm in the sheet is solid red. */}
+        {/* Signing out deletes nothing, so it's quiet: the outline style in the
+            normal text colour. Red is only for actions that delete data. */}
         <Button
           label="Sign out"
-          variant="secondaryDanger"
+          variant="secondary"
           onPress={() => setActiveModal('signOut')}
           style={styles.signOutButton}
         />
@@ -537,7 +537,7 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sheetTitle}>Sign out?</Text>
             <Text style={styles.sheetBody}>You&apos;ll need to sign in again to access your account.</Text>
-            <Button label="Sign out" variant="destructive" onPress={handleSignOut} loading={isSigningOut} />
+            <Button label="Sign out" variant="primary" onPress={handleSignOut} loading={isSigningOut} />
             <Button label="Cancel" variant="secondary" onPress={closeModal} style={styles.sheetButtonSpacing} />
           </View>
         ) : null}

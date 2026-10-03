@@ -3,10 +3,7 @@
  *   primary          navy (colors.primaryButton), white text: the main action
  *   secondary        white with a border, navy text: the other option
  *                    (Cancel, Try again, Enter manually)
- *   secondaryDanger  the secondary style with red text: leaving actions that
- *                    delete nothing (Sign out on Profile)
- *   destructive      solid red, white text: only actions that delete data,
- *                    and the final confirm in the sign-out sheet
+ *   destructive      solid red, white text: only actions that delete data
  *   inverse          white, navy text: the primary button on dark (navy)
  *                    surfaces, such as Home's filing card
  * All are pill-shaped. Disabled is a flat grey with dark grey text (not a
@@ -26,7 +23,7 @@ import {
 import { colors } from '../../constants/colors';
 import { radii, spacing, typography } from '../../constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'secondaryDanger' | 'destructive' | 'inverse';
+type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'inverse';
 
 type ButtonProps = {
   label: string;
@@ -48,7 +45,7 @@ export function Button({
   const isDisabled = disabled || loading;
   // Loading keeps the variant's colour; only a real "can't do this yet" greys out.
   const showDisabled = disabled && !loading;
-  const isOutline = variant === 'secondary' || variant === 'secondaryDanger';
+  const isOutline = variant === 'secondary';
 
   return (
     <Pressable
@@ -66,13 +63,7 @@ export function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={
-            variant === 'secondary' || variant === 'inverse'
-              ? colors.primaryButton
-              : variant === 'secondaryDanger'
-                ? colors.danger
-                : colors.onPrimaryButton
-          }
+          color={variant === 'secondary' || variant === 'inverse' ? colors.primaryButton : colors.onPrimaryButton}
         />
       ) : (
         <Text style={[styles.label, textVariantStyles[variant], showDisabled && styles.disabledText]}>
@@ -119,11 +110,6 @@ const variantStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  secondaryDanger: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   destructive: {
     backgroundColor: colors.danger,
   },
@@ -138,9 +124,6 @@ const textVariantStyles = StyleSheet.create({
   },
   secondary: {
     color: colors.primaryButton,
-  },
-  secondaryDanger: {
-    color: colors.danger,
   },
   destructive: {
     color: colors.onPrimaryButton,

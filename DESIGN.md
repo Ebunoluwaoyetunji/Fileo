@@ -20,6 +20,8 @@ a screen.
 | `heroTint` | `#ECF2EE` | The hero area at the top of summary screens, and the soft circle behind list-row icons. |
 | `indigo` / `indigoTint` | `#2A1A78` / `#E6E1FA` | Onboarding illustration badges only (step 1's tax form, step 2's upload badge). |
 | `navyTint` | `#E5EAF2` | The pale centre of a navy-icon onboarding badge. |
+| `heroNavyEnd` | `#17294A` | Onboarding hero: brand navy at the top easing to this. |
+| `ringOnDark` / `outlineOnDark` | white at 30% / 35% | Onboarding: the orbit ring on navy, and the outline that keeps the navy phone visible on navy. |
 | `offWhite` | `#FAFAF8` | Quiet cards on white (the split stat card). |
 | `background` | `#FFFFFF` | Screens and the white content sheet. |
 | `surface` | `#F7F8FA` | Default card fill. |
@@ -27,12 +29,13 @@ a screen.
 | `textPrimary` | `#111417` | Body text and headings. |
 | `textSecondary` | `#5B6470` | Secondary text, labels, captions (5.9:1 on white). |
 | `amberTint` / `amberBorder` / `amberText` | `#FBF4E6` / `#EEDDB9` / `#7A5310` | Calm "needs attention" (something missing). Not an error. |
-| `danger` | `#D93025` | Errors; solid fill only on buttons that delete data or confirm sign-out (white text 4.8:1); red text on Sign out. |
+| `danger` | `#D93025` | Errors; solid fill only on buttons that delete data (white text 4.8:1). |
 | `successTint` | `#DCEFE3` | "Completed" / "Submitted" status pills. |
 | `disabledSurface` | `#E6E9ED` | Disabled buttons, with `textSecondary` text. |
 
 - Do: navy for the one main action on a screen, and green for good news.
 - Don't: use green for buttons, red for "something is missing" (use amber), or gradients on new work.
+  The one exception is the onboarding hero (see Onboarding below).
 
 ## Type
 
@@ -68,28 +71,42 @@ a screen.
 - Sizes: 16 (inline with small text), 20 (default), 24 (tab bar, list leads,
   prominent actions). 40 is only for large decorative icons in empty states.
 - Don't pass `strokeWidth`. Pass a size only when it isn't 20.
-- Custom illustrations (onboarding, confirmation seals, the wordmark) stay as images.
-  The exception is onboarding step 2's orbit, which is drawn in vector (react-native-svg and
-  Lucide) so it stays crisp while it turns.
+- Custom illustrations (confirmation seals, the wordmark) stay as images. The onboarding
+  illustrations are the exception: they are drawn in vector (react-native-svg, Views and
+  Lucide) so they stay crisp and can move.
 - Onboarding badges are a light disc with a pale tint in the centre and one Lucide icon,
   with no outline, shadow or glow. Pair each icon colour with its tint: navy with `navyTint`,
   `indigo` with `indigoTint`, `warning` with `amberTint`, and `primary` with `primaryLight`.
 
 ## Components
 
+- **Onboarding** (`components/layout/OnboardingScreen` and `components/onboarding/`): the
+  three onboarding screens share everything except the headline, subtitle and drawing, so
+  they can't drift apart.
+  - The hero is the same on all three: brand navy easing to `heroNavyEnd`, white headline
+    (`typography.display`, like every other screen) and white subtitle, and a green active
+    page dot. Screens don't pass their own colours.
+  - `IllustrationCanvas` centres each drawing in the same square, and the lower third of
+    every drawing sinks into white (an eased fade that runs on into the sheet below).
+  - `OnboardingBadge`, and `art.ts` for sizes, line widths, timings and badge colours;
+    `motion.ts` for the shared loop and float. Motion is transforms and opacity only, on the
+    native driver (the JS driver on web), and holds still when reduce motion is on.
+  - The drawings: 1, a navy phone with the Fileo wordmark and two floating document cards;
+    2, five badges orbiting a ring, one per filing step (keep it in step with
+    `FILING_STEPS`); 3, a small masked ID card (made-up numbers only) whose digits turn
+    into dots, then a seal pops on.
+
 - **Button** (`components/ui/Button`): one style per variant, all pill-shaped.
   - `primary`: navy, for the main action. Use one per screen.
   - `secondary`: white with a border and navy text, for the alternative (Cancel, Try again).
-  - `secondaryDanger`: the secondary style with red text, for leaving actions that delete nothing (Sign out on Profile).
-  - `destructive`: solid red with white text.
+  - `destructive`: solid red with white text, only for actions that delete data.
   - `inverse`: white with navy text. **On dark surfaces, the primary button
     is white with navy text** (Home's filing card). Use one per dark card.
   - `loading` keeps the colour and shows a spinner. `disabled` turns flat grey.
-- **When to use solid red:** only for actions that delete data (Delete
-  document) and for the final confirm in the sign-out sheet. Sign out itself
-  isn't destructive, so its entry point is `secondaryDanger`.
-  - Do: Profile → "Sign out" (`secondaryDanger`) → sheet → "Sign out" (`destructive`) and "Cancel" (`secondary`).
-  - Don't: a solid red button that only opens a confirmation, or red fill for anything that can be undone.
+- **When to use red:** only for actions that delete data (Delete document).
+  Signing out deletes nothing, so it stays quiet.
+  - Do: Profile → "Sign out" (`secondary`) → sheet → "Sign out" (`primary`) and "Cancel" (`secondary`).
+  - Don't: red for Sign out, a solid red button that only opens a confirmation, or red for anything that can be undone.
 - **Card** (`components/ui/Card`): 20pt radius, hairline border, 24pt padding.
   In lists, use 16pt side padding with hairline dividers between rows.
 - **HeroScroll** (`components/layout/HeroScroll`): a summary hero on

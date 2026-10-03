@@ -90,6 +90,7 @@ import { categoryLabel, DocumentRecord, listDocuments } from '../../lib/document
 import { describeMissingItem, getMissingItems, MissingItem } from '../../lib/filings';
 import { RELIEF_LABELS, TaxCalculation, taxSavedKobo } from '../../lib/filings';
 import { formatNaira } from '../../lib/money';
+import { useAuth } from '../../state/authContext';
 import { useFiling } from '../../state/filingContext';
 
 type Tab = 'summary' | 'calculation' | 'documents';
@@ -102,10 +103,6 @@ const TAB_FADE_MS = 180;
 
 /** The first sentence of a server note, for a short reason. */
 const firstSentence = (text: string) => text.match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? text;
-
-/** Not stored per user yet: every return shows this state (same text as
- * the old screen's Filing Information). */
-const STATE_LABEL = 'Lagos State';
 
 const DEDUCTION_ICONS: Record<string, typeof PiggyBank> = {
   pension: PiggyBank,
@@ -133,6 +130,9 @@ function ReturnReviewContent() {
     draft,
     refreshDraft,
   } = useFiling();
+  const { profile } = useAuth();
+  // The state from the profile; when it isn't set, no state is shown at all.
+  const stateName = profile?.state?.trim() || null;
   const insets = useSafeAreaInsets();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -266,7 +266,7 @@ function ReturnReviewContent() {
             <ReceiptText size={20} color={colors.backgroundInverse} />
           </View>
           <Text style={styles.heroLabel} accessibilityRole="header">
-            {taxYear} · {STATE_LABEL}
+            {stateName ? `${taxYear} · ${stateName}` : taxYear}
           </Text>
           <Text
             style={styles.heroAmount}
@@ -319,6 +319,7 @@ function ReturnReviewContent() {
                 <SummaryTab
                   calc={calc}
                   taxYear={taxYear}
+                  stateName={stateName}
                   totalIncomeKobo={totalIncomeKobo}
                   incomeSources={incomeSources}
                   deductions={deductions}
@@ -422,6 +423,7 @@ function ReturnReviewContent() {
 function SummaryTab({
   calc,
   taxYear,
+  stateName,
   totalIncomeKobo,
   incomeSources,
   deductions,
@@ -430,6 +432,7 @@ function SummaryTab({
 }: {
   calc: TaxCalculation | null;
   taxYear: number;
+  stateName: string | null;
   totalIncomeKobo: number;
   incomeSources: { id: string; label: string; amountKobo: number | null }[];
   deductions: { id: string; label: string; amountPaidKobo: number | null }[];
@@ -517,7 +520,7 @@ function SummaryTab({
       <SectionHeader title="Filing details" />
       <Card style={styles.listCard}>
         <ListRow first label="Tax year" value={String(taxYear)} plain />
-        <ListRow label="State" value={STATE_LABEL} plain />
+        {stateName ? <ListRow label="State" value={stateName} plain /> : null}
         <ListRow label="Prepared by" value="Fileo Tax Professional" plain />
       </Card>
     </View>

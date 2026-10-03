@@ -43,6 +43,8 @@ export type Profile = {
   identity_check_type: 'bvn' | 'nin' | null;
   identity_provider: string | null;
   identity_reference: string | null;
+  /** The state they file in, as it should read ("Lagos State"); null = not set, show none. */
+  state: string | null;
   /** When the user allowed AI reading of their statements (null = not allowed). */
   ai_consent_at: string | null;
   /** When they chose "Enter manually" or switched AI reading off. */
